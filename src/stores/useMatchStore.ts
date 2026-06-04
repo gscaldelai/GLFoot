@@ -1,0 +1,548 @@
+import { create } from 'zustand'
+import type { Club, Player, MatchEvent } from '@/engines/types'
+import { CLUBS } from '@/data/clubs'
+
+export interface CompletedSeason {
+  seasonNum:   number
+  year:        number
+  clubId:      string
+  clubName:    string
+  clubShort:   string
+  clubColors:  [string, string, string]
+  position:    number
+  points:      number
+  wins:        number
+  isChampion:  boolean
+  champion:    string   // short do campeão
+}
+import {
+  poissonSample, calcLambda, scheduleGoalMinutes, pickScorer,
+} from '@/engines/matchEngine'
+import {
+  effectiveAvgSquad, applyMatchFatigue, applyBenchRecovery, rollDoubleWeek,
+} from '@/engines/fatigueEngine'
+import { calcTicketRevenue, CLUB_STADIUM, STADIUMS } from '@/data/stadiums'
+import { useLineupStore }      from './useLineupStore'
+import { useFinanceStore }     from './useFinanceStore'
+import { useStadiumStore }     from './useStadiumStore'
+import { useConfidenceStore }             from './useConfidenceStore'
+import { CLUB_STRENGTH }                 from '@/data/clubStrength'
+import { getContractGoal, calcInitialBudget } from '@/data/clubGoals'
+import { getFormationBonus, pickBotFormation, type FormationKey } from '@/data/formations'
+
+// ── Detecção de importância do jogo ─────────────────────
+// Pares de clássicos reconhecidos (IDs em ordem alfabética)
+const CLASICOS = new Set([
+  'palm_spfc', 'atl_cru', 'fla_flu', 'int_gre', 'bot_fla',
+  'cor_spfc', 'palm_cor', 'bot_vas',
+])
+function classicoPair(idA: string, idB: string): boolean {
+  const key = [idA, idB].sort().join('_')
+  return CLASICOS.has(key)
+}
+function detectImportance(round: number, homeId: string, awayId: string): 'normal' | 'classico' | 'final' {
+  if (round >= 38) return 'final'
+  if (classicoPair(homeId, awayId)) return 'classico'
+  return 'normal'
+}
+
+interface SideEvent {
+  min:   number
+  html:  string
+  type:  string
+  fired: boolean
+}
+
+interface DragSource {
+  side:   'home' | 'away'
+  idx:    number
+  player: Player
+}
+
+interface GoalFlash {
+  scorer: string
+  isAway: boolean
+}
+
+import type { ContractGoal } from '@/data/clubGoals'
+
+interface MatchStore {
+  // ── carreira ──────────────────────────────────────────
+  myClubId:         string | null
+  coachName:        string
+  coachNationality: string
+  season:           number
+  round:            number
+  standings:        StandingRow[]
+  matchHistory:     HistoryRow[]
+  completedSeasons: CompletedSeason[]
+  contractGoal:     ContractGoal | null
+  initialBudget:    number
+
+  // ── partida ───────────────────────────────────────────
+  homeFormation: FormationKey | null   // formação usada pelo time da casa
+  awayFormation: FormationKey | null   // formação usada pelo time visitante
+  homeClub:  Club | null
+  awayClub:  Club | null
+  homeSquad: Player[]
+  awaySquad: Player[]
+  homeBench: Player[]
+  awayBench: Player[]
+  subCount:  { home: number; away: number }
+
+  gh: number
+  ga: number
+  minute:  number
+  second:  number
+  running: boolean
+  ended:   boolean
+  speed:   1 | 1.5 | 2
+
+  goalMinsH: number[]
+  goalMinsA: number[]
+  firedH:    Set<number>
+  firedA:    Set<number>
+  sideEvents: SideEvent[]
+  events:     MatchEvent[]
+
+  dragSrc:        DragSource | null
+  goalFlash:      GoalFlash | null
+  victoryVisible: boolean
+  seasonEndVisible: boolean
+
+  // ── screen ────────────────────────────────────────────
+  screen: 'select' | 'hub' | 'match'
+
+  // ── actions ───────────────────────────────────────────
+  selectClub:   (clubId: string, allClubs: Club[], coachName?: string, coachNationality?: string) => void
+  prepareMatch: (home: Club, away: Club) => void
+  setSpeed:     (v: 1 | 1.5 | 2) => void
+  toggleRun:    () => void
+  tick:         () => void
+  doSub:        (side: 'home' | 'away', fieldIdx: number, benchIdx: number) => void
+  setDragSrc:   (src: DragSource | null) => void
+  clearGoalFlash: () => void
+  closeVictory: () => void
+  nextRound:    () => void
+  closeSeasonEnd: () => void
+  goToMatch:    () => void
+  goToHub:      () => void
+}
+
+export interface StandingRow {
+  id:          string
+  name:        string
+  short:       string
+  colors:      [string, string, string]
+  crestColors: [string, string]
+  pts: number; j: number; v: number; e: number; d: number; gf: number; ga: number
+}
+
+export interface HistoryRow {
+  round:     number
+  homeId:    string
+  awayId:    string
+  homeShort: string
+  awayShort: string
+  gh:        number
+  ga:        number
+}
+
+// ── 18 clubes bot para completar o brasileirão ────────────
+const BOT_CLUBS: Array<{ id: string; short: string; name: string; colors: [string,string,string]; crestColors: [string,string] }> = [
+  { id:'atl',  short:'ATL',  name:'Atlético-MG',   colors:['#000','#fff','#000'],     crestColors:['#000','#fff']   },
+  { id:'int',  short:'INT',  name:'Internacional',  colors:['#c8002d','#fff','#c8002d'], crestColors:['#c8002d','#fff'] },
+  { id:'fla',  short:'FLA',  name:'Flamengo',       colors:['#e30613','#000','#e30613'], crestColors:['#e30613','#000'] },
+  { id:'cor',  short:'COR',  name:'Corinthians',    colors:['#000','#fff','#000'],     crestColors:['#000','#fff']   },
+  { id:'gre',  short:'GRE',  name:'Grêmio',         colors:['#1c5fa8','#000','#fff'],  crestColors:['#1c5fa8','#000'] },
+  { id:'bot',  short:'BOT',  name:'Botafogo',       colors:['#000','#fff','#000'],     crestColors:['#000','#fff']   },
+  { id:'for',  short:'FOR',  name:'Fortaleza',      colors:['#003399','#ff0000','#003399'], crestColors:['#003399','#ff0000'] },
+  { id:'bah',  short:'BAH',  name:'Bahia',          colors:['#003399','#c8002d','#003399'], crestColors:['#003399','#c8002d'] },
+  { id:'cru',  short:'CRU',  name:'Cruzeiro',       colors:['#003399','#fff','#003399'], crestColors:['#003399','#fff'] },
+  { id:'vas',  short:'VAS',  name:'Vasco',          colors:['#000','#fff','#000'],     crestColors:['#000','#fff']   },
+  { id:'cap',  short:'CAP',  name:'Athletico-PR',   colors:['#c8002d','#000','#c8002d'], crestColors:['#c8002d','#000'] },
+  { id:'goi',  short:'GOI',  name:'Goiás',          colors:['#008000','#fff','#008000'], crestColors:['#008000','#fff'] },
+  { id:'bra',  short:'BRA',  name:'Bragantino',     colors:['#c8002d','#000','#fff'],  crestColors:['#c8002d','#000'] },
+  { id:'san',  short:'SAN',  name:'Santos',         colors:['#fff','#000','#fff'],     crestColors:['#fff','#000']   },
+  { id:'csa',  short:'CSA',  name:'CSA',            colors:['#003399','#fff','#000'],  crestColors:['#003399','#fff'] },
+  { id:'ame',  short:'AME',  name:'América-MG',     colors:['#008000','#fff','#000'],  crestColors:['#008000','#fff'] },
+  { id:'cru2', short:'CEA',  name:'Ceará',          colors:['#000','#fff','#000'],     crestColors:['#000','#fff']   },
+  { id:'spo',  short:'SPO',  name:'Sport',          colors:['#c8002d','#000','#c8002d'], crestColors:['#c8002d','#000'] },
+]
+
+function initStandings(realClubs: Club[]): StandingRow[] {
+  const rows: StandingRow[] = [
+    ...realClubs.map(c => ({
+      id: c.id, name: c.name, short: c.short,
+      colors: c.colors, crestColors: c.crestColors,
+      pts:0,j:0,v:0,e:0,d:0,gf:0,ga:0,
+    })),
+    ...BOT_CLUBS.map(c => ({
+      id: c.id, name: c.name, short: c.short,
+      colors: c.colors, crestColors: c.crestColors,
+      pts:0,j:0,v:0,e:0,d:0,gf:0,ga:0,
+    })),
+  ]
+  return rows.sort(() => Math.random() - 0.5)
+}
+
+function applyResult(rows: StandingRow[], hId: string, aId: string, gh: number, ga: number): StandingRow[] {
+  return rows.map(r => {
+    if (r.id === hId) {
+      const pts = gh > ga ? 3 : gh === ga ? 1 : 0
+      return { ...r, j:r.j+1, gf:r.gf+gh, ga:r.ga+ga,
+        v:r.v+(gh>ga?1:0), e:r.e+(gh===ga?1:0), d:r.d+(gh<ga?1:0), pts:r.pts+pts }
+    }
+    if (r.id === aId) {
+      const pts = ga > gh ? 3 : ga === gh ? 1 : 0
+      return { ...r, j:r.j+1, gf:r.gf+ga, ga:r.ga+gh,
+        v:r.v+(ga>gh?1:0), e:r.e+(ga===gh?1:0), d:r.d+(ga<gh?1:0), pts:r.pts+pts }
+    }
+    return r
+  }).sort((a,b) => b.pts-a.pts || b.v-a.v || (b.gf-b.ga)-(a.gf-a.ga) || b.gf-a.gf)
+}
+
+function genSideEvents(): SideEvent[] {
+  const pool = [
+    (m: number): SideEvent => ({ min:m, html:`<span class="text-gold font-bold">${m}'</span> Falta perigosa`, type:'foul', fired:false }),
+    (m: number): SideEvent => ({ min:m, html:`<span class="text-gold font-bold">${m}'</span> 🟨 Cartão amarelo`, type:'yellow', fired:false }),
+    (m: number): SideEvent => ({ min:m, html:`<span class="text-gold font-bold">${m}'</span> Impedimento — VAR`, type:'foul', fired:false }),
+    (m: number): SideEvent => ({ min:m, html:`<span class="text-gold font-bold">${m}'</span> Chute na trave!`, type:'foul', fired:false }),
+    (m: number): SideEvent => ({ min:m, html:`<span class="text-gold font-bold">${m}'</span> Defesa difícil`, type:'foul', fired:false }),
+    (m: number): SideEvent => ({ min:m, html:`<span class="text-gold font-bold">${m}'</span> VAR em análise...`, type:'foul', fired:false }),
+  ]
+  const mins = scheduleGoalMinutes(5 + Math.floor(Math.random() * 5))
+  return mins.map(m => pool[Math.floor(Math.random() * pool.length)](m))
+}
+
+export const useMatchStore = create<MatchStore>((set, get) => ({
+  myClubId:         null,
+  coachName:        '',
+  coachNationality: '',
+  season:           1,
+  round:            1,
+  standings:        [],
+  matchHistory:     [],
+  completedSeasons: [],
+  contractGoal:     null,
+  initialBudget:    10_000_000,
+  homeFormation:   null,
+  awayFormation:   null,
+  homeClub:        null,
+  awayClub:        null,
+  homeSquad:       [],
+  awaySquad:       [],
+  homeBench:       [],
+  awayBench:       [],
+  subCount:        { home: 0, away: 0 },
+  gh: 0, ga: 0,
+  minute: 0, second: 0,
+  running: false, ended: false, speed: 1,
+  goalMinsH: [], goalMinsA: [],
+  firedH: new Set(), firedA: new Set(),
+  sideEvents: [], events: [],
+  dragSrc: null, goalFlash: null,
+  victoryVisible: false, seasonEndVisible: false,
+  screen: 'select',
+
+  selectClub(clubId, allClubs, coachName = '', coachNationality = '') {
+    const standings = initStandings(allClubs)
+
+    // Calcula orçamento e meta com base na força do clube
+    const strengthEntry = CLUB_STRENGTH.find(e => e.id === clubId)
+    const forcaMedia    = strengthEntry?.forcaMedia ?? 60
+    const contractGoal  = getContractGoal(strengthEntry?.tier, forcaMedia)
+    const initialBudget = calcInitialBudget(forcaMedia)
+
+    // Reseta stores dependentes
+    useFinanceStore.getState().reset(initialBudget)
+    useStadiumStore.getState().reset()
+    useConfidenceStore.getState().reset()
+
+    set({
+      myClubId: clubId, coachName, coachNationality, standings, screen: 'hub',
+      season: 1, round: 1, matchHistory: [], events: [],
+      contractGoal, initialBudget,
+    })
+  },
+
+  prepareMatch(home, away) {
+    // effectiveAvgSquad: usa fatigue real do time do jogador
+    // Para times bot (fatigue === 0), retorna o mesmo que avgSquad
+    const avH = effectiveAvgSquad(home.squad)
+    const avA = effectiveAvgSquad(away.squad)
+
+    // ── Formações ─────────────────────────────────────────
+    const myClubId    = get().myClubId
+    const myFormation = useLineupStore.getState().formation
+    // Bots recebem formação pseudo-aleatória baseada em round+clubId (seed determinístico)
+    const round = get().round
+    const homeIsMe = home.id === myClubId
+    const seedH = home.id.split('').reduce((s, c) => s + c.charCodeAt(0), 0) + round
+    const seedA = away.id.split('').reduce((s, c) => s + c.charCodeAt(0), 0) + round
+    const homeFormation: FormationKey = homeIsMe ? myFormation : pickBotFormation(seedH)
+    const awayFormation: FormationKey = !homeIsMe ? myFormation : pickBotFormation(seedA)
+
+    // Bônus tático: diferença de formação afeta λ de cada lado
+    const bonusH = getFormationBonus(homeFormation, awayFormation)
+    const bonusA = getFormationBonus(awayFormation, homeFormation)
+
+    const golsH = poissonSample(calcLambda(avH, avA, true,  bonusH))
+    const golsA = poissonSample(calcLambda(avA, avH, false, bonusA))
+    set({
+      homeFormation, awayFormation,
+      homeClub:   home,  awayClub:   away,
+      homeSquad:  JSON.parse(JSON.stringify(home.squad)),
+      awaySquad:  JSON.parse(JSON.stringify(away.squad)),
+      homeBench:  JSON.parse(JSON.stringify(home.bench)),
+      awayBench:  JSON.parse(JSON.stringify(away.bench)),
+      subCount:   { home: 0, away: 0 },
+      gh: 0, ga: 0, minute: 0, second: 0,
+      running: false, ended: false, speed: 1,
+      goalMinsH: scheduleGoalMinutes(golsH),
+      goalMinsA: scheduleGoalMinutes(golsA),
+      firedH: new Set(), firedA: new Set(),
+      sideEvents: genSideEvents(), events: [],
+      goalFlash: null, victoryVisible: false,
+    })
+  },
+
+  setSpeed(v) { set({ speed: v }) },
+
+  toggleRun() {
+    const { running, ended } = get()
+    if (ended) return
+    set({ running: !running })
+  },
+
+  tick() {
+    const s = get()
+    if (!s.running || s.ended) return
+    let { minute, second, gh, ga, firedH, firedA } = s
+    const events = [...s.events]
+    let goalFlash: GoalFlash | null = null
+
+    second++
+    if (second >= 60) { second = 0; minute++ }
+    if (minute >= 90) {
+      // Fim de jogo
+      const standings2 = applyResult(s.standings, s.homeClub!.id, s.awayClub!.id, gh, ga)
+      const histRow: HistoryRow = {
+        round: s.round, homeId: s.homeClub!.id, awayId: s.awayClub!.id,
+        homeShort: s.homeClub!.short, awayShort: s.awayClub!.short, gh, ga,
+      }
+
+      // ── Confiança: dispara evento de resultado ───────────
+      const isMyHome = s.homeClub?.id === s.myClubId
+      const isMyAway = s.awayClub?.id === s.myClubId
+      if (isMyHome || isMyAway) {
+        const myGoals  = isMyHome ? gh : ga
+        const oppGoals = isMyHome ? ga : gh
+        const oppClubId = isMyHome ? s.awayClub!.id : s.homeClub!.id
+        const oppEntry  = CLUB_STRENGTH.find(e => e.id === oppClubId)
+        const myEntry   = CLUB_STRENGTH.find(e => e.id === s.myClubId!)
+        const oppForce  = oppEntry?.forcaMedia ?? 60
+        const myForce   = myEntry?.forcaMedia  ?? 60
+        const isClassico = classicoPair(s.homeClub!.id, s.awayClub!.id)
+
+        useConfidenceStore.getState().onMatchResult({
+          round:      s.round,
+          season:     s.season,
+          isHomeGame: isMyHome,
+          myGoals,
+          oppGoals,
+          isClassico,
+          oppForce,
+          myForce,
+        })
+      }
+
+      // ── Receita de bilheteria (somente jogo em casa) ─────
+      if (s.homeClub?.id === s.myClubId) {
+        const stadiumId  = CLUB_STADIUM[s.myClubId!]
+        const stadium    = stadiumId ? STADIUMS[stadiumId] : null
+        if (stadium) {
+          const stadiumStore = useStadiumStore.getState()
+          const capacity     = stadiumStore.getCapacity(stadiumId)
+          const prices       = stadiumStore.getTierPrices(stadiumId)
+          const importance   = detectImportance(s.round, s.homeClub!.id, s.awayClub!.id)
+          const rev          = calcTicketRevenue(stadiumId, importance, capacity, prices, s.round)
+          useFinanceStore.getState().addIncome(
+            rev.revenue,
+            'bilheteria',
+            `Bilheteria R${s.round} — ${s.homeClub!.short} ${gh}×${ga} ${s.awayClub!.short}`,
+            s.round,
+            s.season,
+          )
+        }
+      }
+
+      set({ minute: 90, second: 0, running: false, ended: true,
+            standings: standings2, matchHistory: [...s.matchHistory, histRow],
+            victoryVisible: true })
+      return
+    }
+
+    // Gols casa
+    s.goalMinsH.forEach(gm => {
+      if (minute >= gm && !firedH.has(gm)) {
+        firedH = new Set(firedH); firedH.add(gm); gh++
+        const scorer = pickScorer(s.homeSquad)
+        events.unshift({
+          minute: gm, type: 'goal',
+          html: `<span class="text-gold font-bold">${gm}'</span> <strong class="text-gold">GOOOL!</strong> ${scorer.name}`,
+          icon: '⚽',
+        })
+        goalFlash = { scorer: scorer.name, isAway: false }
+      }
+    })
+
+    // Gols fora
+    s.goalMinsA.forEach(gm => {
+      if (minute >= gm && !firedA.has(gm)) {
+        firedA = new Set(firedA); firedA.add(gm); ga++
+        const scorer = pickScorer(s.awaySquad)
+        events.unshift({
+          minute: gm, type: 'goal-away',
+          html: `<span class="text-gold font-bold">${gm}'</span> <strong class="text-[#10a050]">GOOOL!</strong> ${scorer.name}`,
+          icon: '⚽',
+        })
+        goalFlash = { scorer: scorer.name, isAway: true }
+      }
+    })
+
+    // Eventos laterais
+    const sideEvents = s.sideEvents.map(ev => {
+      if (minute >= ev.min && !ev.fired) {
+        events.unshift({ minute: ev.min, type: ev.type as MatchEvent['type'], html: ev.html })
+        return { ...ev, fired: true }
+      }
+      return ev
+    })
+
+    set({ minute, second, gh, ga, firedH, firedA, events: events.slice(0, 30),
+          sideEvents, goalFlash: goalFlash ?? s.goalFlash })
+  },
+
+  doSub(side, fieldIdx, benchIdx) {
+    const s = get()
+    if (s.subCount[side] >= 3) return
+    const squad = side === 'home' ? [...s.homeSquad] : [...s.awaySquad]
+    const bench = side === 'home' ? [...s.homeBench] : [...s.awayBench]
+    const sub   = bench[benchIdx]
+    const out   = squad[fieldIdx]
+    if (!sub || sub.injured) return
+
+    const newSub = { ...sub, fieldPos: out.fieldPos }
+    squad[fieldIdx] = newSub
+    const newBench = bench.map((p, i) => i === benchIdx ? { ...p, injured: true } : p)
+
+    const events = [...s.events]
+    events.unshift({
+      minute: s.minute, type: 'sub',
+      html: `<span class="text-gold font-bold">${s.minute}'</span> 🔄 ${sub.name} ↑ ${out.name} ↓`,
+    })
+
+    set({
+      ...(side === 'home' ? { homeSquad: squad, homeBench: newBench } : { awaySquad: squad, awayBench: newBench }),
+      subCount: { ...s.subCount, [side]: s.subCount[side] + 1 },
+      events,
+    })
+  },
+
+  setDragSrc: (src) => set({ dragSrc: src }),
+
+  clearGoalFlash: () => set({ goalFlash: null }),
+
+  closeVictory: () => set({ victoryVisible: false }),
+
+  nextRound() {
+    const s = get()
+    let standings = s.standings
+
+    // Simula os jogos dos bots (sem fadiga — times bot têm fatigue === 0 fixo)
+    const realIds = [s.homeClub?.id, s.awayClub?.id].filter(Boolean) as string[]
+    const bots = standings.filter(r => !realIds.includes(r.id))
+    for (let i = 0; i + 1 < bots.length; i += 2) {
+      const gh = poissonSample(1.35)
+      const ga = poissonSample(1.25)
+      standings = applyResult(standings, bots[i].id, bots[i+1].id, gh, ga)
+    }
+
+    // ── Fadiga do time do jogador ──────────────────────────────────────────
+    const doubleWeek = rollDoubleWeek(s.round)
+    const ls = useLineupStore.getState()
+    useLineupStore.setState({
+      slots: ls.slots.map(p => p ? applyMatchFatigue(p, doubleWeek) : null),
+      bench: ls.bench.map(p => applyBenchRecovery(p, doubleWeek)),
+    })
+
+    // ── Desconto de salários (a cada 4 rodadas ≈ mensalmente) ─────────────
+    const lsAfter   = useLineupStore.getState()
+    const squad     = lsAfter.slots.filter(Boolean) as import('@/engines/types').Player[]
+    const bench2    = lsAfter.bench
+    useFinanceStore.getState().deductWages(squad, bench2, s.round, s.season)
+
+    // ── Check financeiro para confiança da diretoria ───────────────────────
+    if (s.round % 4 === 0) {
+      const fin    = useFinanceStore.getState()
+      const ratio  = s.initialBudget > 0 ? fin.budget / s.initialBudget : 1
+      useConfidenceStore.getState().onFinanceCheck(ratio, s.round, s.season)
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
+    const nextRound = s.round + 1
+    if (nextRound > 38) {
+      set({ standings, round: nextRound, victoryVisible: false, seasonEndVisible: true })
+    } else {
+      set({ standings, round: nextRound, victoryVisible: false, screen: 'hub' })
+    }
+  },
+
+  closeSeasonEnd() {
+    const s = get()
+    const nextSeason = s.season + 1
+
+    // Registra a temporada concluída
+    const myRow      = s.standings.find(r => r.id === s.myClubId)
+    const myPosition = s.standings.findIndex(r => r.id === s.myClubId) + 1
+    const myClub     = CLUBS.find(c => c.id === s.myClubId)
+
+    // Avalia meta contratual e dispara evento de confiança
+    if (s.contractGoal) {
+      useConfidenceStore.getState().onSeasonEnd(myPosition, s.contractGoal.primary)
+    }
+
+    if (myClub && myRow) {
+      const entry: CompletedSeason = {
+        seasonNum:  s.season,
+        year:       2025 + s.season,
+        clubId:     myClub.id,
+        clubName:   myClub.name,
+        clubShort:  myClub.short,
+        clubColors: myClub.colors,
+        position:   myPosition,
+        points:     myRow.pts,
+        wins:       myRow.v,
+        isChampion: myPosition === 1,
+        champion:   s.standings[0]?.short ?? '—',
+      }
+      set({ completedSeasons: [...s.completedSeasons, entry] })
+    }
+
+    if (nextSeason > 15) {
+      set({ seasonEndVisible: false, screen: 'select' })
+    } else {
+      const ls = useLineupStore.getState()
+      useLineupStore.setState({
+        slots: ls.slots.map(p => p ? { ...p, fatigue: 0 } : null),
+        bench: ls.bench.map(p => ({ ...p, fatigue: 0 })),
+      })
+      set({ seasonEndVisible: false, season: nextSeason, round: 1, screen: 'select',
+            matchHistory: [], standings: s.standings.map(r => ({ ...r, pts:0,j:0,v:0,e:0,d:0,gf:0,ga:0 })) })
+    }
+  },
+
+  goToMatch() { set({ screen: 'match' }) },
+  goToHub()   { set({ screen: 'hub'   }) },
+}))
