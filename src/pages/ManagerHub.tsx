@@ -5,7 +5,8 @@ import TransferMarket  from '@/pages/TransferMarket'
 import { useMatchStore }       from '@/stores/useMatchStore'
 import { useLineupStore }      from '@/stores/useLineupStore'
 import { useConfidenceStore }  from '@/stores/useConfidenceStore'
-import { CLUBS }          from '@/data/clubs'
+import { CLUBS, CLUBS_MAP } from '@/data/clubs'
+import { getNextFixture }   from '@/engines/fixtureEngine'
 import {
   type FormationKey,
   FORMATION_LABELS,
@@ -129,8 +130,18 @@ function FiredModal() {
 // ── Componente principal ─────────────────────────────────────────────────────
 export default function ManagerHub() {
   const myClubId = useMatchStore(s => s.myClubId)
+  const round    = useMatchStore(s => s.round)
+  const fixtures = useMatchStore(s => s.fixtures)
   const myClub   = CLUBS.find(c => c.id === myClubId) ?? CLUBS[0]
-  const opp      = CLUBS.find(c => c.id !== myClubId) ?? CLUBS[1]
+
+  // Próximo adversário via fixture real; fallback para primeiro clube diferente
+  const nextFix   = myClubId ? getNextFixture(fixtures, myClubId, round) : undefined
+  const nextOppId = nextFix
+    ? (nextFix.homeId === myClubId ? nextFix.awayId : nextFix.homeId)
+    : undefined
+  const opp = (nextOppId ? CLUBS_MAP[nextOppId] : undefined)
+    ?? CLUBS.find(c => c.id !== myClubId)
+    ?? CLUBS[1]
   const init     = useLineupStore(s => s.init)
   const initialized = useRef(false)
   const isFired  = useConfidenceStore(s => s.isFired)
@@ -343,10 +354,52 @@ function ContractBanner() {
 }
 
 // ── Painel da Equipe (layout principal) ───────────────────────────────────────
+function NextMatchCard() {
+  const myClubId = useMatchStore(s => s.myClubId)
+  const round    = useMatchStore(s => s.round)
+  const fixtures = useMatchStore(s => s.fixtures)
+
+  const nextFix = myClubId ? getNextFixture(fixtures, myClubId, round) : undefined
+  if (!nextFix) return null
+
+  const oppId   = nextFix.homeId === myClubId ? nextFix.awayId : nextFix.homeId
+  const oppClub = CLUBS_MAP[oppId]
+  const isHome  = nextFix.homeId === myClubId
+  const oppName = oppClub?.name ?? oppId
+
+  // Força média do adversário via elenco real
+  const oppAvg  = oppClub
+    ? Math.round([...oppClub.squad].reduce((s, p) => s + p.forca, 0) / oppClub.squad.length * 10) / 10
+    : '?'
+
+  return (
+    <div className="mx-4 mt-3 mb-1 px-3 py-2 rounded-xl border border-[#1e3a50]
+                    bg-[#0a1e2e] flex items-center gap-3">
+      <div className="text-[9px] tracking-[2px] uppercase text-[#4a6a80] shrink-0">
+        Rodada {nextFix.round}
+      </div>
+      <div className={`text-[9px] px-[6px] py-[2px] rounded font-bold
+                       ${isHome ? 'bg-glgreen/20 text-glgreen' : 'bg-[#2a2030] text-[#8060a0]'}`}>
+        {isHome ? '⌂ CASA' : '✈ FORA'}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[12px] font-bold text-white/90 truncate">{oppName}</div>
+        <div className="text-[10px] text-[#4a6070]">Força média: <span className="text-gold">{oppAvg}</span></div>
+      </div>
+      {oppClub && (
+        <div className="shrink-0 w-6 h-6 rounded-full border border-border overflow-hidden">
+          <div className="w-full h-full" style={{ background: oppClub.colors[0] }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PainelEquipe({ myClub, opp }: { myClub: Club; opp: Club }) {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <ContractBanner />
+      <NextMatchCard />
       <div className="flex flex-1 overflow-hidden">
         <SquadPanel colors={myClub.colors} />
         <EscalacaoPanel myClub={myClub} opp={opp} />

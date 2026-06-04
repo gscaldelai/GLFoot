@@ -1,36 +1,44 @@
-// Tabela interna de força dos clubes — não exibida ao usuário.
-// Usada para lógica de freemium (bloqueio Free ≤ 50) e testes de cenário.
-// Para testar: importe CLUB_STRENGTH e altere os valores livremente.
-
 export interface ClubStrengthEntry {
   id:         string
   name:       string
   division:   1 | 2 | 3
-  forcaMedia: number   // média calculada do elenco (cache)
-  tier:       'S' | 'A' | 'B' | 'C'  // classificação qualitativa
+  forcaMedia: number
+  tier:       'S' | 'A' | 'B' | 'C'
 }
 
 export const CLUB_STRENGTH: ClubStrengthEntry[] = [
-  { id: 'spfc',      name: 'São Paulo FC', division: 1, forcaMedia: 73,   tier: 'A' },
-  { id: 'palmeiras', name: 'Palmeiras',    division: 1, forcaMedia: 74.4, tier: 'A' },
-  // ── Série A (placeholders — adicionar ao cadastrar clubes) ──
-  // { id: 'flamengo',  name: 'Flamengo',    division: 1, forcaMedia: 78,   tier: 'S' },
-  // { id: 'atletico',  name: 'Atlético-MG', division: 1, forcaMedia: 76,   tier: 'S' },
-  // { id: 'corinthians', name: 'Corinthians', division: 1, forcaMedia: 70, tier: 'A' },
-  // ── Série B (placeholders) ──
-  // { id: 'coritiba',  name: 'Coritiba',    division: 2, forcaMedia: 58,   tier: 'B' },
-  // ── Série C (placeholders) ──
-  // { id: 'abc',       name: 'ABC',         division: 3, forcaMedia: 44,   tier: 'C' },
+  // ── Tier S ──────────────────────────────────────────────────
+  { id:'fla',  name:'Flamengo',      division:1, forcaMedia:78,   tier:'S' },
+  { id:'atl',  name:'Atlético-MG',   division:1, forcaMedia:76,   tier:'S' },
+  // ── Tier A ──────────────────────────────────────────────────
+  { id:'palmeiras', name:'Palmeiras',division:1, forcaMedia:74.4, tier:'A' },
+  { id:'spfc', name:'São Paulo FC',  division:1, forcaMedia:73,   tier:'A' },
+  { id:'bot',  name:'Botafogo',      division:1, forcaMedia:73,   tier:'A' },
+  { id:'int',  name:'Internacional', division:1, forcaMedia:72,   tier:'A' },
+  { id:'cor',  name:'Corinthians',   division:1, forcaMedia:71,   tier:'A' },
+  { id:'cru',  name:'Cruzeiro',      division:1, forcaMedia:71,   tier:'A' },
+  { id:'gre',  name:'Grêmio',        division:1, forcaMedia:70,   tier:'A' },
+  // ── Tier B ──────────────────────────────────────────────────
+  { id:'cap',  name:'Athletico-PR',  division:1, forcaMedia:68,   tier:'B' },
+  { id:'bra',  name:'Bragantino',    division:1, forcaMedia:67,   tier:'B' },
+  { id:'for',  name:'Fortaleza',     division:1, forcaMedia:67,   tier:'B' },
+  { id:'vas',  name:'Vasco da Gama', division:1, forcaMedia:66,   tier:'B' },
+  { id:'bah',  name:'Bahia',         division:1, forcaMedia:65,   tier:'B' },
+  { id:'san',  name:'Santos',        division:1, forcaMedia:65,   tier:'B' },
+  // ── Tier C ──────────────────────────────────────────────────
+  { id:'goi',  name:'Goiás',         division:1, forcaMedia:58,   tier:'C' },
+  { id:'ame',  name:'América-MG',    division:1, forcaMedia:56,   tier:'C' },
+  { id:'cru2', name:'Ceará',         division:1, forcaMedia:55,   tier:'C' },
+  { id:'spo',  name:'Sport',         division:1, forcaMedia:54,   tier:'C' },
+  { id:'csa',  name:'CSA',           division:1, forcaMedia:52,   tier:'C' },
 ]
 
-// Retorna a força de um clube pelo id, ou null se não cadastrado.
 export function getClubStrength(id: string): ClubStrengthEntry | undefined {
   return CLUB_STRENGTH.find(e => e.id === id)
 }
 
-// Verifica se um clube está disponível no plano Free (força ≤ 50).
 export function isAvailableOnFree(id: string): boolean {
   const entry = getClubStrength(id)
-  if (!entry) return true   // clube sem registro passa por padrão
+  if (!entry) return true
   return entry.forcaMedia <= 50
 }

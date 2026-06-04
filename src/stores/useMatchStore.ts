@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Club, Player, MatchEvent } from '@/engines/types'
-import { CLUBS } from '@/data/clubs'
+import { CLUBS, CLUBS_MAP } from '@/data/clubs'
 
 export interface CompletedSeason {
   seasonNum:   number
@@ -29,6 +29,8 @@ import { useConfidenceStore }             from './useConfidenceStore'
 import { CLUB_STRENGTH }                 from '@/data/clubStrength'
 import { getContractGoal, calcInitialBudget } from '@/data/clubGoals'
 import { getFormationBonus, pickBotFormation, type FormationKey } from '@/data/formations'
+import { generateFixtures, type FixtureGame } from '@/engines/fixtureEngine'
+import { avgSquad } from '@/engines/matchEngine'
 
 // ── Detecção de importância do jogo ─────────────────────
 // Pares de clássicos reconhecidos (IDs em ordem alfabética)
@@ -78,6 +80,7 @@ interface MatchStore {
   completedSeasons: CompletedSeason[]
   contractGoal:     ContractGoal | null
   initialBudget:    number
+  fixtures:         FixtureGame[]
 
   // ── partida ───────────────────────────────────────────
   homeFormation: FormationKey | null   // formação usada pelo time da casa
@@ -148,42 +151,15 @@ export interface HistoryRow {
   ga:        number
 }
 
-// ── 18 clubes bot para completar o brasileirão ────────────
-const BOT_CLUBS: Array<{ id: string; short: string; name: string; colors: [string,string,string]; crestColors: [string,string] }> = [
-  { id:'atl',  short:'ATL',  name:'Atlético-MG',   colors:['#000','#fff','#000'],     crestColors:['#000','#fff']   },
-  { id:'int',  short:'INT',  name:'Internacional',  colors:['#c8002d','#fff','#c8002d'], crestColors:['#c8002d','#fff'] },
-  { id:'fla',  short:'FLA',  name:'Flamengo',       colors:['#e30613','#000','#e30613'], crestColors:['#e30613','#000'] },
-  { id:'cor',  short:'COR',  name:'Corinthians',    colors:['#000','#fff','#000'],     crestColors:['#000','#fff']   },
-  { id:'gre',  short:'GRE',  name:'Grêmio',         colors:['#1c5fa8','#000','#fff'],  crestColors:['#1c5fa8','#000'] },
-  { id:'bot',  short:'BOT',  name:'Botafogo',       colors:['#000','#fff','#000'],     crestColors:['#000','#fff']   },
-  { id:'for',  short:'FOR',  name:'Fortaleza',      colors:['#003399','#ff0000','#003399'], crestColors:['#003399','#ff0000'] },
-  { id:'bah',  short:'BAH',  name:'Bahia',          colors:['#003399','#c8002d','#003399'], crestColors:['#003399','#c8002d'] },
-  { id:'cru',  short:'CRU',  name:'Cruzeiro',       colors:['#003399','#fff','#003399'], crestColors:['#003399','#fff'] },
-  { id:'vas',  short:'VAS',  name:'Vasco',          colors:['#000','#fff','#000'],     crestColors:['#000','#fff']   },
-  { id:'cap',  short:'CAP',  name:'Athletico-PR',   colors:['#c8002d','#000','#c8002d'], crestColors:['#c8002d','#000'] },
-  { id:'goi',  short:'GOI',  name:'Goiás',          colors:['#008000','#fff','#008000'], crestColors:['#008000','#fff'] },
-  { id:'bra',  short:'BRA',  name:'Bragantino',     colors:['#c8002d','#000','#fff'],  crestColors:['#c8002d','#000'] },
-  { id:'san',  short:'SAN',  name:'Santos',         colors:['#fff','#000','#fff'],     crestColors:['#fff','#000']   },
-  { id:'csa',  short:'CSA',  name:'CSA',            colors:['#003399','#fff','#000'],  crestColors:['#003399','#fff'] },
-  { id:'ame',  short:'AME',  name:'América-MG',     colors:['#008000','#fff','#000'],  crestColors:['#008000','#fff'] },
-  { id:'cru2', short:'CEA',  name:'Ceará',          colors:['#000','#fff','#000'],     crestColors:['#000','#fff']   },
-  { id:'spo',  short:'SPO',  name:'Sport',          colors:['#c8002d','#000','#c8002d'], crestColors:['#c8002d','#000'] },
-]
-
-function initStandings(realClubs: Club[]): StandingRow[] {
-  const rows: StandingRow[] = [
-    ...realClubs.map(c => ({
+// initStandings usa CLUBS diretamente — todos os 20 clubes têm JSON
+function initStandings(allClubs: Club[]): StandingRow[] {
+  return allClubs
+    .map(c => ({
       id: c.id, name: c.name, short: c.short,
       colors: c.colors, crestColors: c.crestColors,
-      pts:0,j:0,v:0,e:0,d:0,gf:0,ga:0,
-    })),
-    ...BOT_CLUBS.map(c => ({
-      id: c.id, name: c.name, short: c.short,
-      colors: c.colors, crestColors: c.crestColors,
-      pts:0,j:0,v:0,e:0,d:0,gf:0,ga:0,
-    })),
-  ]
-  return rows.sort(() => Math.random() - 0.5)
+      pts:0, j:0, v:0, e:0, d:0, gf:0, ga:0,
+    }))
+    .sort(() => Math.random() - 0.5)
 }
 
 function applyResult(rows: StandingRow[], hId: string, aId: string, gh: number, ga: number): StandingRow[] {
@@ -226,6 +202,7 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
   completedSeasons: [],
   contractGoal:     null,
   initialBudget:    10_000_000,
+  fixtures:         [],
   homeFormation:   null,
   awayFormation:   null,
   homeClub:        null,
@@ -254,6 +231,11 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
     const contractGoal  = getContractGoal(strengthEntry?.tier, forcaMedia)
     const initialBudget = calcInitialBudget(forcaMedia)
 
+    // Gera fixture completo (round-robin 38 rodadas)
+    // Embaralha a ordem dos times para variar o calendário a cada carreira
+    const shuffledIds = standings.map(r => r.id).sort(() => Math.random() - 0.5)
+    const fixtures = generateFixtures(shuffledIds)
+
     // Reseta stores dependentes
     useFinanceStore.getState().reset(initialBudget)
     useStadiumStore.getState().reset()
@@ -262,7 +244,7 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
     set({
       myClubId: clubId, coachName, coachNationality, standings, screen: 'hub',
       season: 1, round: 1, matchHistory: [], events: [],
-      contractGoal, initialBudget,
+      contractGoal, initialBudget, fixtures,
     })
   },
 
@@ -460,13 +442,28 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
     const s = get()
     let standings = s.standings
 
-    // Simula os jogos dos bots (sem fadiga — times bot têm fatigue === 0 fixo)
-    const realIds = [s.homeClub?.id, s.awayClub?.id].filter(Boolean) as string[]
-    const bots = standings.filter(r => !realIds.includes(r.id))
-    for (let i = 0; i + 1 < bots.length; i += 2) {
-      const gh = poissonSample(1.35)
-      const ga = poissonSample(1.25)
-      standings = applyResult(standings, bots[i].id, bots[i+1].id, gh, ga)
+    // Simula os jogos dos bots usando fixtures e força real dos clubes
+    const myId = s.myClubId
+    const roundFixtures = s.fixtures.filter(f => f.round === s.round)
+    for (const fix of roundFixtures) {
+      if (fix.homeId === myId || fix.awayId === myId) continue  // jogo do player, já resolvido
+      const homeClub = CLUBS_MAP[fix.homeId]
+      const awayClub = CLUBS_MAP[fix.awayId]
+      const avH = homeClub ? avgSquad(homeClub.squad) : (CLUB_STRENGTH.find(e => e.id === fix.homeId)?.forcaMedia ?? 65)
+      const avA = awayClub ? avgSquad(awayClub.squad) : (CLUB_STRENGTH.find(e => e.id === fix.awayId)?.forcaMedia ?? 65)
+      const gh = poissonSample(calcLambda(avH, avA, true))
+      const ga = poissonSample(calcLambda(avA, avH, false))
+      standings = applyResult(standings, fix.homeId, fix.awayId, gh, ga)
+    }
+    // Fallback: se não há fixtures (carreira antiga), simula sem fixture
+    if (roundFixtures.length === 0) {
+      const realIds = [s.homeClub?.id, s.awayClub?.id].filter(Boolean) as string[]
+      const bots = standings.filter(r => !realIds.includes(r.id))
+      for (let i = 0; i + 1 < bots.length; i += 2) {
+        const gh = poissonSample(1.35)
+        const ga = poissonSample(1.25)
+        standings = applyResult(standings, bots[i].id, bots[i+1].id, gh, ga)
+      }
     }
 
     // ── Fadiga do time do jogador ──────────────────────────────────────────

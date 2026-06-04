@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react'
 import { buildSPFCCalendar, calcStats, type CalendarGame } from '@/engines/calendarEngine'
 import { useMatchStore } from '@/stores/useMatchStore'
-import { CLUBS }         from '@/data/clubs'
+import { CLUBS, CLUBS_MAP } from '@/data/clubs'
 
 // ── Cores por competição ─────────────────────────────────
 const COMP_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -46,6 +46,7 @@ function currentWeekFromRound(calendar: CalendarGame[], round: number): number {
 export default function CalendarView() {
   const round    = useMatchStore(s => s.round)
   const myClubId = useMatchStore(s => s.myClubId)
+  const fixtures = useMatchStore(s => s.fixtures)
   const myClub   = CLUBS.find(c => c.id === myClubId)
 
   const calendar = useMemo(() => buildSPFCCalendar(), [])
@@ -201,6 +202,8 @@ export default function CalendarView() {
           calendar={filtered}
           currentWeek={currentWeek}
           myClub={myClub}
+          myClubId={myClubId ?? ''}
+          fixtures={fixtures}
         />
       )}
     </div>
@@ -291,25 +294,24 @@ function GameChip({ game }: { game: CalendarGame }) {
 
 // ── Aba "Jogos do Seu Time" ───────────────────────────────
 import type { Club } from '@/engines/types'
+import type { FixtureGame } from '@/engines/fixtureEngine'
 
 function MyGamesTab({
-  calendar, currentWeek, myClub,
+  calendar, currentWeek, myClub, myClubId, fixtures,
 }: {
-  calendar: CalendarGame[]
+  calendar:    CalendarGame[]
   currentWeek: number
-  myClub: Club | undefined
+  myClub:      Club | undefined
+  myClubId:    string
+  fixtures:    FixtureGame[]
 }) {
-  // Separa em passados (week < currentWeek) e próximos (week >= currentWeek)
-  const past    = calendar.filter(g => g.week < currentWeek).slice(-5).reverse()
+  const past     = calendar.filter(g => g.week < currentWeek).slice(-5).reverse()
   const upcoming = calendar.filter(g => g.week >= currentWeek).slice(0, 20)
 
   return (
     <div className="flex-1 overflow-y-auto">
-      {/* Próximos jogos */}
       <div className="px-5 pt-4 pb-2">
-        <div className="text-[9px] tracking-[3px] uppercase text-[#4a6070] mb-3">
-          Próximos Jogos
-        </div>
+        <div className="text-[9px] tracking-[3px] uppercase text-[#4a6070] mb-3">Próximos Jogos</div>
         {upcoming.length === 0 ? (
           <div className="text-[12px] text-[#3a5060] italic py-6 text-center">
             Sem jogos futuros no filtro atual.
@@ -317,19 +319,12 @@ function MyGamesTab({
         ) : (
           <div className="flex flex-col gap-[6px]">
             {upcoming.map((g, i) => (
-              <MyGameRow
-                key={i}
-                game={g}
-                isCurrent={g.week === currentWeek}
-                isPast={false}
-                myClub={myClub}
-              />
+              <MyGameRow key={i} game={g} isCurrent={g.week === currentWeek}
+                isPast={false} myClub={myClub} myClubId={myClubId} fixtures={fixtures} />
             ))}
           </div>
         )}
       </div>
-
-      {/* Jogos anteriores */}
       {past.length > 0 && (
         <div className="px-5 pt-4 pb-4">
           <div className="text-[9px] tracking-[3px] uppercase text-[#4a6070] mb-3 flex items-center gap-2">
@@ -338,7 +333,8 @@ function MyGamesTab({
           </div>
           <div className="flex flex-col gap-[6px]">
             {past.map((g, i) => (
-              <MyGameRow key={i} game={g} isCurrent={false} isPast myClub={myClub} />
+              <MyGameRow key={i} game={g} isCurrent={false} isPast
+                myClub={myClub} myClubId={myClubId} fixtures={fixtures} />
             ))}
           </div>
         </div>
@@ -348,15 +344,34 @@ function MyGamesTab({
 }
 
 function MyGameRow({
-  game, isCurrent, isPast, myClub,
+  game, isCurrent, isPast, myClub, myClubId, fixtures,
 }: {
-  game: CalendarGame
+  game:      CalendarGame
   isCurrent: boolean
-  isPast: boolean
-  myClub: Club | undefined
+  isPast:    boolean
+  myClub:    Club | undefined
+  myClubId:  string
+  fixtures:  FixtureGame[]
 }) {
   const c          = getColor(game.competitionShort)
   const phaseShort = abbreviatePhase(game.phaseName)
+
+  // Resolve adversário real para jogos do Brasileirão
+  // game.gameIndex = índice 0-based → round = gameIndex + 1
+  let oppShort = '???'
+  let oppName  = '???'
+  if (game.competitionShort === 'BRAS' && fixtures.length > 0) {
+    const round   = game.gameIndex + 1
+    const fix     = fixtures.find(
+      f => f.round === round && (f.homeId === myClubId || f.awayId === myClubId)
+    )
+    if (fix) {
+      const oppId = fix.homeId === myClubId ? fix.awayId : fix.homeId
+      const oppClub = CLUBS_MAP[oppId]
+      oppShort = oppClub?.short ?? oppId.toUpperCase()
+      oppName  = oppClub?.name  ?? oppId
+    }
+  }
 
   return (
     <div className={`flex items-center gap-3 px-3 py-[9px] rounded-xl border transition-all
@@ -400,12 +415,14 @@ function MyGameRow({
           <>
             <span className="font-bold text-white/80">{myClub?.short ?? 'TIME'}</span>
             <span className="text-[#3a5060]">×</span>
-            <span className="text-[#5a7080]">???</span>
+            <span className={`${oppShort === '???' ? 'text-[#5a7080]' : 'text-white/80'}`}
+                  title={oppName}>{oppShort}</span>
             <span className="text-[10px] text-glgreen font-bold ml-1">⌂</span>
           </>
         ) : (
           <>
-            <span className="text-[#5a7080]">???</span>
+            <span className={`${oppShort === '???' ? 'text-[#5a7080]' : 'text-white/80'}`}
+                  title={oppName}>{oppShort}</span>
             <span className="text-[#3a5060]">×</span>
             <span className="font-bold text-white/80">{myClub?.short ?? 'TIME'}</span>
             <span className="text-[10px] text-[#4a6070] font-bold ml-1">✈</span>
