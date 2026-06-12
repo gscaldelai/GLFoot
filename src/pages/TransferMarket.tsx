@@ -15,6 +15,7 @@ import { useTransferStore } from '@/stores/useTransferStore'
 import { useFinanceStore }  from '@/stores/useFinanceStore'
 import type { Player, Pos, Spec } from '@/engines/types'
 import ClubCrest from '@/components/ClubCrest'
+import { avgSquad } from '@/engines/matchEngine'
 
 // ── Helpers ──────────────────────────────────────────────
 const SPEC_LABEL: Record<string, string> = {
@@ -93,12 +94,16 @@ const LEAGUE_TREE: LeagueNode[] = [
 //  Componente principal — Mercado
 // ════════════════════════════════════════════════════════
 export default function TransferMarket() {
-  const myClubId    = useMatchStore(s => s.myClubId)
-  const budget      = useFinanceStore(s => s.budget)
-  const toggleSale  = useTransferStore(s => s.toggleSale)
-  const toggleLoan  = useTransferStore(s => s.toggleLoan)
-  const isForSale   = useTransferStore(s => s.isForSale)
-  const isForLoan   = useTransferStore(s => s.isForLoan)
+  const myClubId         = useMatchStore(s => s.myClubId)
+  const acquiredPlayers  = useMatchStore(s => s.acquiredPlayers)
+  const executeTransfer  = useMatchStore(s => s.executeTransfer)
+  const budget           = useFinanceStore(s => s.budget)
+  const toggleSale       = useTransferStore(s => s.toggleSale)
+  const toggleLoan       = useTransferStore(s => s.toggleLoan)
+  const isForSale        = useTransferStore(s => s.isForSale)
+  const isForLoan        = useTransferStore(s => s.isForLoan)
+
+  const [transferMsg, setTransferMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   // ── Estado de navegação ──────────────────────────────
   const [selectedClubId, setSelectedClubId] = useState<string | null>(myClubId)
@@ -126,7 +131,17 @@ export default function TransferMarket() {
   const totalTrophies = trophies.reduce((s, t) => s + t.years.length, 0)
   const isOwnClub     = selectedClubId === myClubId
 
-  const MY_CLUB_FORCE = 72           // TODO: calcular do elenco real quando clubes bot forem implementados
+  // IDs de jogadores já adquiridos nesta carreira (para filtrar da tabela)
+  const acquiredKeys = useMemo(
+    () => new Set(acquiredPlayers.map(a => `${a.fromClubId}_${a.player.num}`)),
+    [acquiredPlayers],
+  )
+
+  // Força média real do meu clube
+  const myRealClub    = CLUBS.find(c => c.id === myClubId)
+  const MY_CLUB_FORCE = myRealClub
+    ? Math.round(avgSquad([...myRealClub.squad, ...myRealClub.bench]))
+    : 72
   const MY_BUDGET     = budget
   const sellerForce   = realClub
     ? Math.round(allPlayers.reduce((s, p) => s + p.forca, 0) / Math.max(allPlayers.length, 1))
@@ -149,6 +164,7 @@ export default function TransferMarket() {
   }, [filterAllClubs, realClub, allPlayers])
 
   const filteredRows = useMemo(() => sourcePool.filter(({ player: p, clubId }) => {
+    if (acquiredKeys.has(`${clubId}_${p.num}`)) return false  // já adquirido
     if (filterName    && !p.name.toLowerCase().includes(filterName.toLowerCase())) return false
     if (filterPos     && p.pos  !== filterPos)  return false
     if (filterSpec    && p.spec !== filterSpec && p.spec2 !== filterSpec) return false
@@ -156,7 +172,7 @@ export default function TransferMarket() {
     if (filterOnlySale && !isForSale(clubId, p.num)) return false
     if (filterOnlyLoan && !isForLoan(clubId, p.num)) return false
     return true
-  }), [sourcePool, filterName, filterPos, filterSpec, filterForceMin, filterForceMax, filterOnlySale, filterOnlyLoan, isForSale, isForLoan])
+  }), [sourcePool, acquiredKeys, filterName, filterPos, filterSpec, filterForceMin, filterForceMax, filterOnlySale, filterOnlyLoan, isForSale, isForLoan])
 
   const hasFilters = filterName || filterPos || filterSpec ||
     filterForceMin > 1 || filterForceMax < 99 ||
@@ -545,25 +561,41 @@ export default function TransferMarket() {
               ) : (
                 /* Clube alheio — ações de compra */
                 <div className="flex items-center gap-2">
-                  {selectedPlayer && !(loanEligibility?.allowed) && (
+                  {transferMsg && (
+                    <span className={`text-[10px] max-w-[240px] truncate font-medium ${transferMsg.ok ? 'text-glgreen' : 'text-glred'}`}>
+                      {transferMsg.ok ? '✓' : '✗'} {transferMsg.text}
+                    </span>
+                  )}
+                  {!transferMsg && selectedPlayer && !(loanEligibility?.allowed) && (
                     <span className="text-[10px] text-[#f0a020]/70 max-w-[200px] truncate">
                       🔄 {loanEligibility?.reason}
                     </span>
                   )}
-                  {selectedPlayer && !(buyEligibility?.allowed) && (
+                  {!transferMsg && selectedPlayer && !(buyEligibility?.allowed) && (
                     <span className="text-[10px] text-glred/70 max-w-[200px] truncate">
                       🚫 {buyEligibility?.reason}
                     </span>
                   )}
                   <ActionButton label="Empréstimo"
                     enabled={!!selectedPlayer && (loanEligibility?.allowed ?? false)}
-                    tooltip={loanEligibility?.reason} />
-                  <ActionButton label="Comprar"
-                    enabled={!!selectedPlayer && (buyEligibility?.allowed ?? false)}
-                    tooltip={buyEligibility?.reason} />
+                    tooltip={loanEligibility?.reason}
+                    onClick={() => {
+                      if (!selectedPlayer || !selectedClubId) return
+                      const result = executeTransfer(selectedPlayer, selectedClubId, 'loan')
+                      setTransferMsg({ ok: result.ok, text: result.msg })
+                      if (result.ok) setSelectedPlayer(null)
+                      setTimeout(() => setTransferMsg(null), 3000)
+                    }} />
                   <ActionButton label="Fazer oferta" highlight
                     enabled={!!selectedPlayer && (buyEligibility?.allowed ?? false)}
-                    tooltip={buyEligibility?.reason} />
+                    tooltip={buyEligibility?.reason}
+                    onClick={() => {
+                      if (!selectedPlayer || !selectedClubId) return
+                      const result = executeTransfer(selectedPlayer, selectedClubId, 'buy')
+                      setTransferMsg({ ok: result.ok, text: result.msg })
+                      if (result.ok) setSelectedPlayer(null)
+                      setTimeout(() => setTransferMsg(null), 3000)
+                    }} />
                 </div>
               )}
             </div>
@@ -608,12 +640,12 @@ function ToggleButton({ label, active, enabled, onClick, activeColor }: {
   )
 }
 
-function ActionButton({ label, enabled, tooltip, highlight }: {
-  label: string; enabled: boolean; tooltip?: string; highlight?: boolean
+function ActionButton({ label, enabled, tooltip, highlight, onClick }: {
+  label: string; enabled: boolean; tooltip?: string; highlight?: boolean; onClick?: () => void
 }) {
   return (
     <div className="relative group">
-      <button disabled={!enabled}
+      <button disabled={!enabled} onClick={onClick}
         className={`px-4 py-[6px] rounded-lg font-bebas text-[12px] tracking-[1px] border transition-all
                     ${!enabled ? 'border-border/40 text-[#3a5060] cursor-not-allowed opacity-50'
                       : highlight ? 'border-gold bg-gold/10 text-gold hover:bg-gold hover:text-black'

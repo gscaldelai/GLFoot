@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { Club, Player, MatchEvent } from '@/engines/types'
 import { CLUBS, CLUBS_MAP } from '@/data/clubs'
 
@@ -67,6 +68,15 @@ interface GoalFlash {
 }
 
 import type { ContractGoal } from '@/data/clubGoals'
+import { calcPasse, calcSalary } from '@/engines/marketEngine'
+
+export interface AcquiredPlayer {
+  player:     Player
+  fromClubId: string
+  type:       'buy' | 'loan'
+  round:      number
+  season:     number
+}
 
 interface MatchStore {
   // ── carreira ──────────────────────────────────────────
@@ -81,6 +91,7 @@ interface MatchStore {
   contractGoal:     ContractGoal | null
   initialBudget:    number
   fixtures:         FixtureGame[]
+  acquiredPlayers:  AcquiredPlayer[]
 
   // ── partida ───────────────────────────────────────────
   homeFormation: FormationKey | null   // formação usada pelo time da casa
@@ -117,19 +128,20 @@ interface MatchStore {
   screen: 'select' | 'hub' | 'match'
 
   // ── actions ───────────────────────────────────────────
-  selectClub:   (clubId: string, allClubs: Club[], coachName?: string, coachNationality?: string) => void
-  prepareMatch: (home: Club, away: Club) => void
-  setSpeed:     (v: 1 | 1.5 | 2) => void
-  toggleRun:    () => void
-  tick:         () => void
-  doSub:        (side: 'home' | 'away', fieldIdx: number, benchIdx: number) => void
-  setDragSrc:   (src: DragSource | null) => void
-  clearGoalFlash: () => void
-  closeVictory: () => void
-  nextRound:    () => void
-  closeSeasonEnd: () => void
-  goToMatch:    () => void
-  goToHub:      () => void
+  selectClub:      (clubId: string, allClubs: Club[], coachName?: string, coachNationality?: string) => void
+  prepareMatch:    (home: Club, away: Club) => void
+  setSpeed:        (v: 1 | 1.5 | 2) => void
+  toggleRun:       () => void
+  tick:            () => void
+  doSub:           (side: 'home' | 'away', fieldIdx: number, benchIdx: number) => void
+  setDragSrc:      (src: DragSource | null) => void
+  clearGoalFlash:  () => void
+  closeVictory:    () => void
+  nextRound:       () => void
+  closeSeasonEnd:  () => void
+  goToMatch:       () => void
+  goToHub:         () => void
+  executeTransfer: (player: Player, fromClubId: string, type: 'buy' | 'loan') => { ok: boolean; msg: string }
 }
 
 export interface StandingRow {
@@ -191,7 +203,9 @@ function genSideEvents(): SideEvent[] {
   return mins.map(m => pool[Math.floor(Math.random() * pool.length)](m))
 }
 
-export const useMatchStore = create<MatchStore>((set, get) => ({
+export const useMatchStore = create<MatchStore>()(
+  persist(
+  (set, get) => ({
   myClubId:         null,
   coachName:        '',
   coachNationality: '',
@@ -203,6 +217,7 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
   contractGoal:     null,
   initialBudget:    10_000_000,
   fixtures:         [],
+  acquiredPlayers:  [],
   homeFormation:   null,
   awayFormation:   null,
   homeClub:        null,
@@ -244,7 +259,7 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
     set({
       myClubId: clubId, coachName, coachNationality, standings, screen: 'hub',
       season: 1, round: 1, matchHistory: [], events: [],
-      contractGoal, initialBudget, fixtures,
+      contractGoal, initialBudget, fixtures, acquiredPlayers: [],
     })
   },
 
@@ -542,4 +557,54 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
 
   goToMatch() { set({ screen: 'match' }) },
   goToHub()   { set({ screen: 'hub'   }) },
-}))
+
+  executeTransfer(player, fromClubId, type) {
+    const s    = get()
+    const fin  = useFinanceStore.getState()
+    const passe = calcPasse(player)
+    const sal   = calcSalary(player)
+
+    if (type === 'buy') {
+      const needed = passe + sal * 6
+      if (fin.budget < needed) {
+        return { ok: false, msg: `Saldo insuficiente. Necessário R$ ${(needed/1e6).toFixed(1)}M.` }
+      }
+      fin.addExpense(passe, 'transferencia', `Compra: ${player.name} (${fromClubId.toUpperCase()})`, s.round, s.season)
+    } else {
+      // Empréstimo: apenas reserva 3 meses de salário
+      const reserve = sal * 3
+      if (fin.budget < reserve) {
+        return { ok: false, msg: `Saldo insuficiente para reserva de empréstimo (3 meses = R$ ${(reserve/1e6).toFixed(1)}M).` }
+      }
+      fin.addExpense(reserve, 'transferencia', `Empréstimo: ${player.name} (${fromClubId.toUpperCase()})`, s.round, s.season)
+    }
+
+    // Adiciona ao banco do useLineupStore
+    const ls = useLineupStore.getState()
+    useLineupStore.setState({ bench: [...ls.bench, { ...player, contractYearsLeft: type === 'loan' ? 1 : player.contractYearsLeft }] })
+
+    const entry: AcquiredPlayer = { player, fromClubId, type, round: s.round, season: s.season }
+    set({ acquiredPlayers: [...s.acquiredPlayers, entry] })
+    return { ok: true, msg: type === 'buy' ? `${player.name} contratado!` : `${player.name} emprestado!` }
+  },
+  }),
+  {
+    name: 'glfoot-career',
+    version: 1,
+    partialize: (s) => ({
+      myClubId:        s.myClubId,
+      coachName:       s.coachName,
+      coachNationality:s.coachNationality,
+      season:          s.season,
+      round:           s.round,
+      standings:       s.standings,
+      matchHistory:    s.matchHistory,
+      completedSeasons:s.completedSeasons,
+      contractGoal:    s.contractGoal,
+      initialBudget:   s.initialBudget,
+      fixtures:        s.fixtures,
+      acquiredPlayers: s.acquiredPlayers,
+      screen:          s.screen,
+    }),
+  },
+))
