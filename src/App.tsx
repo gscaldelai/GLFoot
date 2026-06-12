@@ -1,9 +1,10 @@
-import { useMatchStore } from '@/stores/useMatchStore'
-import { useAuthStore }  from '@/stores/useAuthStore'
-import AuthScreen  from '@/pages/AuthScreen'
-import ClubSelect  from '@/pages/ClubSelect'
-import ManagerHub  from '@/pages/ManagerHub'
-import Match       from '@/pages/Match'
+import { useMatchStore }    from '@/stores/useMatchStore'
+import { useAuthStore }     from '@/stores/useAuthStore'
+import AuthScreen           from '@/pages/AuthScreen'
+import ClubSelect           from '@/pages/ClubSelect'
+import ManagerHub           from '@/pages/ManagerHub'
+import Match                from '@/pages/Match'
+import SeasonEndOverlay     from '@/pages/SeasonEndOverlay'
 
 export default function App() {
   const user   = useAuthStore(s => s.user)
@@ -21,6 +22,7 @@ export default function App() {
       {screen === 'select' && <ClubSelect />}
       {screen === 'hub'    && <ManagerHub />}
       {screen === 'match'  && <Match />}
+      <SeasonEndOverlay />
     </div>
   )
 }

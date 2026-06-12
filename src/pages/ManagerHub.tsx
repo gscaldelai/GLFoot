@@ -12,6 +12,7 @@ import {
   FORMATION_LABELS,
   FORMATION_DESC,
   getFormationBonus,
+  pickBotFormation,
 } from '@/data/formations'
 import { VerticalField }  from '@/pages/LineupEditor'
 import { withBotFatigue } from '@/engines/fatigueEngine'
@@ -372,6 +373,15 @@ function NextMatchCard() {
     ? Math.round([...oppClub.squad].reduce((s, p) => s + p.forca, 0) / oppClub.squad.length * 10) / 10
     : '?'
 
+  // Formação do adversário (determinística por clubId + round)
+  const seed         = oppId.split('').reduce((s, c) => s + c.charCodeAt(0), 0) + nextFix.round
+  const oppFormation = pickBotFormation(seed)
+
+  // Bônus tático da minha formação contra a formação do adversário
+  const myFormation  = useLineupStore(s => s.formation)
+  const tacBonus     = getFormationBonus(myFormation, oppFormation)
+  const tacAdvantage = tacBonus > 0 ? 'win' : getFormationBonus(oppFormation, myFormation) > 0 ? 'lose' : 'neutral'
+
   return (
     <div className="mx-4 mt-3 mb-1 px-3 py-2 rounded-xl border border-[#1e3a50]
                     bg-[#0a1e2e] flex items-center gap-3">
@@ -384,7 +394,19 @@ function NextMatchCard() {
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-[12px] font-bold text-white/90 truncate">{oppName}</div>
-        <div className="text-[10px] text-[#4a6070]">Força média: <span className="text-gold">{oppAvg}</span></div>
+        <div className="flex items-center gap-2 mt-[2px]">
+          <span className="text-[10px] text-[#4a6070]">F: <span className="text-gold">{oppAvg}</span></span>
+          <span className="text-[10px] text-[#3a5060]">·</span>
+          <span className="text-[10px] text-[#4a6070]">
+            Joga: <span className="text-white/70 font-bold">{FORMATION_LABELS[oppFormation]}</span>
+          </span>
+          {tacAdvantage === 'win' && (
+            <span className="text-[9px] text-emerald-400 font-bold">⚡ vantagem</span>
+          )}
+          {tacAdvantage === 'lose' && (
+            <span className="text-[9px] text-red-400 font-bold">⚠ desvantagem</span>
+          )}
+        </div>
       </div>
       {oppClub && (
         <div className="shrink-0 w-6 h-6 rounded-full border border-border overflow-hidden">
