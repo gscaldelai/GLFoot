@@ -45,6 +45,9 @@ interface ConfidenceStore {
   // Fim de temporada
   onSeasonEnd: (finalPosition: number, goalType: GoalType) => void
 
+  // Eliminação de copa
+  onCupElimination: (compName: string, phase: string, round: number, season: number, prestige: number) => void
+
   // Verificação financeira (chamar a cada 4 rodadas)
   onFinanceCheck: (budgetRatio: number, round: number, season: number) => void
 
@@ -232,6 +235,40 @@ export const useConfidenceStore = create<ConfidenceStore>()(
           isFired,
           firedBy,
           events: [...evts, ...st.events].slice(0, 50),
+        }))
+      },
+
+      onCupElimination(compName, phase, round, season, prestige) {
+        const s = get()
+        if (s.isFired) return
+
+        // Penalidade proporcional ao prestígio e à fase (eliminação precoce dói mais)
+        const earlyMultiplier = phase.toLowerCase().includes('oitavas') ? 1.5
+          : phase.toLowerCase().includes('quartas') ? 1.2
+          : phase.toLowerCase().includes('semis')   ? 0.8
+          : 0.5   // final ou grupos
+
+        const torDelta = -Math.round(3 * prestige * earlyMultiplier)
+        const dirDelta = -Math.round(2 * prestige * earlyMultiplier)
+
+        const newTor = clamp(s.torcida   + torDelta)
+        const newDir = clamp(s.diretoria + dirDelta)
+
+        const evt: ConfidenceEvent = {
+          round, season, source: 'ambos', delta: torDelta,
+          description: `Eliminado da ${compName} nas ${phase}`,
+        }
+
+        let isFired: boolean = s.isFired
+        let firedBy: 'diretoria' | 'torcida' | 'pressao_combinada' | null = s.firedBy
+        if (!isFired && (newDir === 0 || newTor === 0)) {
+          isFired = true; firedBy = newDir === 0 ? 'diretoria' : 'torcida'
+        }
+
+        set(st => ({
+          diretoria: newDir, torcida: newTor,
+          isFired, firedBy,
+          events: [evt, ...st.events].slice(0, 50),
         }))
       },
 

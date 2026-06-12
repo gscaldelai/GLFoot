@@ -163,34 +163,60 @@ function findSlot(load: number[], start: number, end: number): number {
   return -1
 }
 
-// ── Helper: calendário do SPFC (para testes) ─────────────
-
-export const SPFC_COMPETITIONS = [
-  'paulistao',
-  'recopa',
-  'libertadores',
-  'copa_brasil',
-  'brasileirao',
-  'mundial',
-]
-
-// Rounds do Brasileirão fixados em semanas específicas para o calendário SPFC
-// Formato: { round (1-based): semana }
-const SPFC_PINNED_BRAS: Record<number, number> = {
-  22: 38, 23: 38,
-  24: 39, 25: 39,
-  26: 40, 27: 40,
-  28: 41, 29: 41,
-  30: 42, 31: 42,
-  // S43 → LIB Final (sem Brasileirão)
-  32: 44, 33: 44,
-  34: 45, 35: 45,
-  36: 46, 37: 46,
-  38: 47,
+// ── Competições por clube ─────────────────────────────────
+// Reflete a realidade do Brasileirão 2026
+export const CLUB_COMPETITIONS: Record<string, string[]> = {
+  spfc:      ['paulistao',        'libertadores',  'copa_brasil', 'brasileirao'],
+  palmeiras: ['paulistao',        'libertadores',  'copa_brasil', 'brasileirao'],
+  fla:       ['carioca',          'libertadores',  'copa_brasil', 'brasileirao'],
+  atl:       ['mineiro',          'libertadores',  'copa_brasil', 'brasileirao'],
+  bot:       ['carioca',          'sulamericana',  'copa_brasil', 'brasileirao'],
+  int:       ['gaucho',           'libertadores',  'copa_brasil', 'brasileirao'],
+  cor:       ['paulistao',        'sulamericana',  'copa_brasil', 'brasileirao'],
+  cru:       ['mineiro',          'sulamericana',  'copa_brasil', 'brasileirao'],
+  gre:       ['gaucho',           'libertadores',  'copa_brasil', 'brasileirao'],
+  cap:       ['paranaense',       'sulamericana',  'copa_brasil', 'brasileirao'],
+  bra:       ['paulistao',        'sulamericana',  'copa_brasil', 'brasileirao'],
+  for:       ['cearense',         'copa_nordeste', 'copa_brasil', 'brasileirao'],
+  vas:       ['carioca',                           'copa_brasil', 'brasileirao'],
+  bah:       ['baiano',           'copa_nordeste', 'copa_brasil', 'brasileirao'],
+  san:       ['paulistao',                         'copa_brasil', 'brasileirao'],
+  goi:       ['goiano',                            'copa_brasil', 'brasileirao'],
+  ame:       ['mineiro',                           'copa_brasil', 'brasileirao'],
+  cru2:      ['cearense',         'copa_nordeste', 'copa_brasil', 'brasileirao'],
+  spo:       ['pernambucano',     'copa_nordeste', 'copa_brasil', 'brasileirao'],
+  csa:       ['estadual_default',                  'copa_brasil', 'brasileirao'],
 }
 
+// Prestígio das copas (peso na penalidade de confiança)
+export const CUP_PRESTIGE: Record<string, number> = {
+  libertadores:  3,
+  sulamericana:  2,
+  copa_brasil:   2,
+  copa_nordeste: 1,
+  paulistao:     1,
+  carioca:       1,
+  gaucho:        1,
+  mineiro:       1,
+  paranaense:    1,
+  baiano:        1,
+  goiano:        1,
+  cearense:      1,
+  pernambucano:  1,
+  estadual_default: 1,
+}
+
+// Gera o calendário do clube com base no CLUB_COMPETITIONS map
+export function buildClubCalendar(clubId: string): CalendarGame[] {
+  const comps = CLUB_COMPETITIONS[clubId] ?? ['brasileirao']
+  return buildCalendar(comps)
+}
+
+// ── Helper: calendário do SPFC (compatibilidade) ──────────
+export const SPFC_COMPETITIONS = CLUB_COMPETITIONS['spfc']
+
 export function buildSPFCCalendar(): CalendarGame[] {
-  return buildCalendar(SPFC_COMPETITIONS, { pinnedBrasRounds: SPFC_PINNED_BRAS })
+  return buildClubCalendar('spfc')
 }
 
 // ── Estatísticas do calendário (para debug/teste) ────────

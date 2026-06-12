@@ -32,6 +32,8 @@ import { getContractGoal, calcInitialBudget } from '@/data/clubGoals'
 import { getFormationBonus, pickBotFormation, type FormationKey } from '@/data/formations'
 import { generateFixtures, type FixtureGame } from '@/engines/fixtureEngine'
 import { avgSquad } from '@/engines/matchEngine'
+import { buildClubCalendar, type CalendarGame, CUP_PRESTIGE } from '@/engines/calendarEngine'
+import { COMPETITION_CATALOG } from '@/data/competitions'
 
 // ── Detecção de importância do jogo ─────────────────────
 // Pares de clássicos reconhecidos (IDs em ordem alfabética)
@@ -92,6 +94,8 @@ interface MatchStore {
   initialBudget:    number
   fixtures:         FixtureGame[]
   acquiredPlayers:  AcquiredPlayer[]
+  clubCalendar:     CalendarGame[]
+  cupStatus:        Record<string, 'active' | 'eliminated'>  // compId → status
 
   // ── partida ───────────────────────────────────────────
   homeFormation: FormationKey | null   // formação usada pelo time da casa
@@ -218,6 +222,8 @@ export const useMatchStore = create<MatchStore>()(
   initialBudget:    10_000_000,
   fixtures:         [],
   acquiredPlayers:  [],
+  clubCalendar:     [],
+  cupStatus:        {},
   homeFormation:   null,
   awayFormation:   null,
   homeClub:        null,
@@ -256,10 +262,17 @@ export const useMatchStore = create<MatchStore>()(
     useStadiumStore.getState().reset()
     useConfidenceStore.getState().reset()
 
+    const clubCalendar = buildClubCalendar(clubId)
+
+    // Inicializa status de copa: todas as competições do clube como 'active'
+    const cupStatus: Record<string, 'active' | 'eliminated'> = {}
+    clubCalendar.forEach(g => { cupStatus[g.competitionId] = 'active' })
+
     set({
       myClubId: clubId, coachName, coachNationality, standings, screen: 'hub',
       season: 1, round: 1, matchHistory: [], events: [],
       contractGoal, initialBudget, fixtures, acquiredPlayers: [],
+      clubCalendar, cupStatus,
     })
   },
 
@@ -495,6 +508,35 @@ export const useMatchStore = create<MatchStore>()(
     const bench2    = lsAfter.bench
     useFinanceStore.getState().deductWages(squad, bench2, s.round, s.season)
 
+    // ── Simulação de copas: fases eliminatórias da semana atual ───────────
+    const currentWeek = s.round   // aproximação: rodada ≈ semana
+    const cupStatus   = { ...s.cupStatus }
+    const myForce     = CLUB_STRENGTH.find(e => e.id === s.myClubId)?.forcaMedia ?? 65
+
+    for (const game of s.clubCalendar) {
+      const comp = COMPETITION_CATALOG[game.competitionId]
+      if (!comp) continue
+      if (game.competitionId === 'brasileirao') continue
+      if (cupStatus[game.competitionId] === 'eliminated') continue
+      if (game.week !== currentWeek) continue
+
+      // Só fases eliminatórias (single_elim ou two_leg_elim)
+      const phase = comp.phases.find(p => p.id === game.phaseId)
+      if (!phase || phase.format === 'league') continue
+
+      // Simula resultado: base 50%, ajustado por força do clube
+      const advBonus  = (myForce - 65) * 0.006   // ±0-9% por força
+      const advances  = Math.random() < (0.50 + advBonus)
+
+      if (!advances) {
+        cupStatus[game.competitionId] = 'eliminated'
+        const prestige = CUP_PRESTIGE[game.competitionId] ?? 1
+        useConfidenceStore.getState().onCupElimination(
+          comp.name, phase.name, s.round, s.season, prestige,
+        )
+      }
+    }
+
     // ── Check financeiro para confiança da diretoria ───────────────────────
     if (s.round % 4 === 0) {
       const fin    = useFinanceStore.getState()
@@ -505,9 +547,9 @@ export const useMatchStore = create<MatchStore>()(
 
     const nextRound = s.round + 1
     if (nextRound > 38) {
-      set({ standings, round: nextRound, victoryVisible: false, seasonEndVisible: true })
+      set({ standings, round: nextRound, victoryVisible: false, seasonEndVisible: true, cupStatus })
     } else {
-      set({ standings, round: nextRound, victoryVisible: false, screen: 'hub' })
+      set({ standings, round: nextRound, victoryVisible: false, screen: 'hub', cupStatus })
     }
   },
 
@@ -550,8 +592,13 @@ export const useMatchStore = create<MatchStore>()(
         slots: ls.slots.map(p => p ? { ...p, fatigue: 0 } : null),
         bench: ls.bench.map(p => ({ ...p, fatigue: 0 })),
       })
+      // Reconstrói calendário e reseta status das copas para nova temporada
+      const newCalendar = s.myClubId ? buildClubCalendar(s.myClubId) : s.clubCalendar
+      const newCupStatus: Record<string, 'active' | 'eliminated'> = {}
+      newCalendar.forEach(g => { newCupStatus[g.competitionId] = 'active' })
       set({ seasonEndVisible: false, season: nextSeason, round: 1, screen: 'select',
-            matchHistory: [], standings: s.standings.map(r => ({ ...r, pts:0,j:0,v:0,e:0,d:0,gf:0,ga:0 })) })
+            matchHistory: [], standings: s.standings.map(r => ({ ...r, pts:0,j:0,v:0,e:0,d:0,gf:0,ga:0 })),
+            clubCalendar: newCalendar, cupStatus: newCupStatus })
     }
   },
 
@@ -604,6 +651,8 @@ export const useMatchStore = create<MatchStore>()(
       initialBudget:   s.initialBudget,
       fixtures:        s.fixtures,
       acquiredPlayers: s.acquiredPlayers,
+      clubCalendar:    s.clubCalendar,
+      cupStatus:       s.cupStatus,
       screen:          s.screen,
     }),
   },

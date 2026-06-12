@@ -4,7 +4,7 @@
 //  Jogos do Seu Time (lista filtrada com próximos jogos).
 // ════════════════════════════════════════════════════════
 import { useMemo, useState } from 'react'
-import { buildSPFCCalendar, calcStats, type CalendarGame } from '@/engines/calendarEngine'
+import { calcStats, type CalendarGame } from '@/engines/calendarEngine'
 import { useMatchStore } from '@/stores/useMatchStore'
 import { CLUBS, CLUBS_MAP } from '@/data/clubs'
 
@@ -44,12 +44,17 @@ function currentWeekFromRound(calendar: CalendarGame[], round: number): number {
 
 // ── Componente principal ─────────────────────────────────
 export default function CalendarView() {
-  const round    = useMatchStore(s => s.round)
-  const myClubId = useMatchStore(s => s.myClubId)
-  const fixtures = useMatchStore(s => s.fixtures)
-  const myClub   = CLUBS.find(c => c.id === myClubId)
+  const round       = useMatchStore(s => s.round)
+  const myClubId    = useMatchStore(s => s.myClubId)
+  const fixtures    = useMatchStore(s => s.fixtures)
+  const cupStatus   = useMatchStore(s => s.cupStatus)
+  const clubCalendar = useMatchStore(s => s.clubCalendar)
+  const myClub      = CLUBS.find(c => c.id === myClubId)
 
-  const calendar = useMemo(() => buildSPFCCalendar(), [])
+  const calendar = useMemo(
+    () => clubCalendar.length > 0 ? clubCalendar : [],
+    [clubCalendar],
+  )
   const stats    = useMemo(() => calcStats(calendar), [calendar])
 
   const currentWeek = useMemo(
@@ -87,6 +92,12 @@ export default function CalendarView() {
   }
 
   const allSelected = activeComps.size === allShorts.length
+
+  // Competições eliminadas (por ID)
+  const eliminatedIds = useMemo(
+    () => new Set(Object.entries(cupStatus).filter(([,v]) => v === 'eliminated').map(([k]) => k)),
+    [cupStatus],
+  )
 
   // Jogos filtrados pelo conjunto ativo
   const filtered = useMemo(
@@ -131,18 +142,24 @@ export default function CalendarView() {
               TODOS
             </button>
             {allShorts.map(short => {
-              const c      = getColor(short)
-              const active = activeComps.has(short)
+              const c          = getColor(short)
+              const active     = activeComps.has(short)
+              // Verifica se alguma competição com este short está eliminada
+              const isElim     = calendar.some(
+                g => g.competitionShort === short && eliminatedIds.has(g.competitionId)
+              )
               return (
                 <button
                   key={short}
                   onClick={() => toggleComp(short)}
-                  style={active
+                  style={active && !isElim
                     ? { background: c.bg, color: c.text, borderColor: c.border }
-                    : { background: 'transparent', color: '#3a5060', borderColor: '#1e2d3d' }}
+                    : { background: 'transparent', color: isElim ? '#4a3a3a' : '#3a5060', borderColor: '#1e2d3d' }}
                   className="text-[10px] font-bold tracking-[1px] px-[8px] py-[3px] rounded-full border
                              transition-all cursor-pointer select-none hover:opacity-80"
+                  title={isElim ? 'Eliminado' : undefined}
                 >
+                  {isElim && <span className="mr-[3px] text-glred/60">✗</span>}
                   {short} {stats.byCompetition[short]}
                 </button>
               )
@@ -204,6 +221,7 @@ export default function CalendarView() {
           myClub={myClub}
           myClubId={myClubId ?? ''}
           fixtures={fixtures}
+          eliminatedIds={eliminatedIds}
         />
       )}
     </div>
@@ -297,13 +315,14 @@ import type { Club } from '@/engines/types'
 import type { FixtureGame } from '@/engines/fixtureEngine'
 
 function MyGamesTab({
-  calendar, currentWeek, myClub, myClubId, fixtures,
+  calendar, currentWeek, myClub, myClubId, fixtures, eliminatedIds,
 }: {
-  calendar:    CalendarGame[]
-  currentWeek: number
-  myClub:      Club | undefined
-  myClubId:    string
-  fixtures:    FixtureGame[]
+  calendar:      CalendarGame[]
+  currentWeek:   number
+  myClub:        Club | undefined
+  myClubId:      string
+  fixtures:      FixtureGame[]
+  eliminatedIds: Set<string>
 }) {
   const past     = calendar.filter(g => g.week < currentWeek).slice(-5).reverse()
   const upcoming = calendar.filter(g => g.week >= currentWeek).slice(0, 20)
@@ -320,7 +339,8 @@ function MyGamesTab({
           <div className="flex flex-col gap-[6px]">
             {upcoming.map((g, i) => (
               <MyGameRow key={i} game={g} isCurrent={g.week === currentWeek}
-                isPast={false} myClub={myClub} myClubId={myClubId} fixtures={fixtures} />
+                isPast={false} myClub={myClub} myClubId={myClubId} fixtures={fixtures}
+                isEliminated={eliminatedIds.has(g.competitionId)} />
             ))}
           </div>
         )}
@@ -334,7 +354,8 @@ function MyGamesTab({
           <div className="flex flex-col gap-[6px]">
             {past.map((g, i) => (
               <MyGameRow key={i} game={g} isCurrent={false} isPast
-                myClub={myClub} myClubId={myClubId} fixtures={fixtures} />
+                myClub={myClub} myClubId={myClubId} fixtures={fixtures}
+                isEliminated={eliminatedIds.has(g.competitionId)} />
             ))}
           </div>
         </div>
@@ -344,14 +365,15 @@ function MyGamesTab({
 }
 
 function MyGameRow({
-  game, isCurrent, isPast, myClub, myClubId, fixtures,
+  game, isCurrent, isPast, isEliminated, myClub, myClubId, fixtures,
 }: {
-  game:      CalendarGame
-  isCurrent: boolean
-  isPast:    boolean
-  myClub:    Club | undefined
-  myClubId:  string
-  fixtures:  FixtureGame[]
+  game:         CalendarGame
+  isCurrent:    boolean
+  isPast:       boolean
+  isEliminated: boolean
+  myClub:       Club | undefined
+  myClubId:     string
+  fixtures:     FixtureGame[]
 }) {
   const c          = getColor(game.competitionShort)
   const phaseShort = abbreviatePhase(game.phaseName)
@@ -379,7 +401,9 @@ function MyGameRow({
                        ? 'border-gold/50 bg-gold/[0.06]'
                        : isPast
                          ? 'border-border/40 bg-surface/30 opacity-50'
-                         : 'border-border bg-surface/60'}`}>
+                         : isEliminated
+                           ? 'border-glred/20 bg-glred/5 opacity-60'
+                           : 'border-border bg-surface/60'}`}>
       {/* Semana */}
       <div className="w-[34px] text-center shrink-0">
         <div className={`font-bebas text-[15px] leading-none ${isCurrent ? 'text-gold' : 'text-white/40'}`}>
@@ -408,6 +432,13 @@ function MyGameRow({
           {phaseShort || game.phaseName}
         </div>
       </div>
+
+      {/* Badge eliminado */}
+      {isEliminated && (
+        <span className="shrink-0 text-[9px] px-[5px] py-[2px] rounded border border-glred/30 text-glred/70 font-bold">
+          ✗ ELIM
+        </span>
+      )}
 
       {/* Meu time × Adversário */}
       <div className="flex items-center gap-2 shrink-0 text-[12px]">
