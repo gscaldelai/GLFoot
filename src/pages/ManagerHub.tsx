@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import CalendarView    from '@/pages/CalendarView'
+import Standings       from '@/components/Standings'
 import StadiumView     from '@/pages/StadiumView'
 import TransferMarket  from '@/pages/TransferMarket'
 import { useMatchStore }       from '@/stores/useMatchStore'
@@ -15,7 +16,7 @@ import {
   pickBotFormation,
 } from '@/data/formations'
 import { VerticalField }  from '@/pages/LineupEditor'
-import { withBotFatigue } from '@/engines/fatigueEngine'
+import { withBotFatigue, effectiveForca } from '@/engines/fatigueEngine'
 import Shirt              from '@/components/Shirt'
 import type { Club, Player } from '@/engines/types'
 import type { StandingRow }  from '@/stores/useMatchStore'
@@ -175,9 +176,10 @@ export default function ManagerHub() {
         {screen === 'painel'   && <PainelEquipe myClub={myClub} opp={opp} />}
         {screen === 'jogos'    && <CalendarView />}
         {screen === 'estadios' && <StadiumView />}
-        {screen === 'mercado' && <TransferMarket />}
+        {screen === 'mercado'  && <TransferMarket />}
+        {screen === 'tabelas'  && <StandingsScreen />}
         {screen !== 'painel' && screen !== 'jogos' && screen !== 'estadios'
-          && screen !== 'mercado'
+          && screen !== 'mercado' && screen !== 'tabelas'
           && <PlaceholderScreen screen={screen} />}
       </main>
     </div>
@@ -277,6 +279,17 @@ const PLACEHOLDER_INFO: Record<NavScreen, { icon: string; label: string; desc: s
   tecnicos: { icon: '🎖', label: 'Técnicos',           desc: 'Ranking global de treinadores com pontuação por títulos conquistados.' },
   historia: { icon: '📖', label: 'História',           desc: 'Almanaque das temporadas — campeões, evolução do ranking e conquistas.' },
   emprego:  { icon: '💼', label: 'Central de Emprego', desc: 'Clubes sem técnico, propostas recebidas e opção de pedir demissão.' },
+}
+
+function StandingsScreen() {
+  return (
+    <div className="flex flex-col flex-1 overflow-hidden p-4">
+      <div className="font-bebas text-[15px] tracking-[3px] text-[#6a8090] mb-3">TABELA · BRASILEIRÃO</div>
+      <div className="flex-1 overflow-auto">
+        <Standings />
+      </div>
+    </div>
+  )
 }
 
 function PlaceholderScreen({ screen }: { screen: NavScreen }) {
@@ -553,7 +566,7 @@ function PlayerRow({
         <span className="font-bebas text-[9px] text-gold leading-none absolute z-20
                          bg-black/80 rounded px-[2px] py-[1px]"
               style={{ bottom: -2, right: -4 }}>
-          {player.forca}
+          {effectiveForca(player)}
         </span>
       </div>
 

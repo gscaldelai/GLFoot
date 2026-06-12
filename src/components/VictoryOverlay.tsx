@@ -20,7 +20,7 @@ export default function VictoryOverlay() {
   const won  = myG > oppG
   const drew = myG === oppG
 
-  const bg = won  ? 'linear-gradient(160deg,#8b0000,#cc0000)'
+  const bg = won  ? 'linear-gradient(160deg,#0a1f14,#0f2d1a)'
            : drew ? 'linear-gradient(160deg,#2a2a2a,#3a3a3a)'
            :        'linear-gradient(160deg,#0d0d0d,#1a2430)'
   const borderColor = won ? '#f0c040' : drew ? '#666' : '#333'

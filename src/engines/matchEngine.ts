@@ -68,7 +68,7 @@ export function scheduleGoalMinutes(count: number): number[] {
  * Jogadores com maior força têm proporcionalmente mais chance
  */
 export function pickScorer(squad: Player[]): Player {
-  const active = squad.filter(p => !p.injured)
+  const active = squad.filter(p => !p.injured && p.pos !== 'GK')
   const total = active.reduce((s, p) => s + p.forca, 0)
   let r = Math.random() * total
   for (const p of active) {

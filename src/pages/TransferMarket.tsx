@@ -43,27 +43,9 @@ interface ClubBasic {
   hasSquad: boolean
 }
 
-const SERIE_A_BASIC: ClubBasic[] = [
-  ...CLUBS.map(c => ({ id: c.id, name: c.name, short: c.short, colors: c.colors, crestColors: c.crestColors, hasSquad: true })),
-  { id:'atl',  name:'Atlético-MG',   short:'ATL', colors:['#000','#fff','#000'],        crestColors:['#000','#fff'],        hasSquad:false },
-  { id:'int',  name:'Internacional', short:'INT', colors:['#c8002d','#fff','#c8002d'],   crestColors:['#c8002d','#fff'],     hasSquad:false },
-  { id:'fla',  name:'Flamengo',      short:'FLA', colors:['#e30613','#000','#e30613'],   crestColors:['#e30613','#000'],     hasSquad:false },
-  { id:'cor',  name:'Corinthians',   short:'COR', colors:['#000','#fff','#000'],        crestColors:['#000','#fff'],        hasSquad:false },
-  { id:'gre',  name:'Grêmio',        short:'GRE', colors:['#1c5fa8','#000','#fff'],     crestColors:['#1c5fa8','#000'],     hasSquad:false },
-  { id:'bot',  name:'Botafogo',      short:'BOT', colors:['#000','#fff','#000'],        crestColors:['#000','#fff'],        hasSquad:false },
-  { id:'for',  name:'Fortaleza',     short:'FOR', colors:['#003399','#f00','#003399'],  crestColors:['#003399','#f00'],     hasSquad:false },
-  { id:'bah',  name:'Bahia',         short:'BAH', colors:['#003399','#c8002d','#003399'],crestColors:['#003399','#c8002d'], hasSquad:false },
-  { id:'cru',  name:'Cruzeiro',      short:'CRU', colors:['#003399','#fff','#003399'],  crestColors:['#003399','#fff'],     hasSquad:false },
-  { id:'vas',  name:'Vasco',         short:'VAS', colors:['#000','#fff','#000'],        crestColors:['#000','#fff'],        hasSquad:false },
-  { id:'cap',  name:'Athletico-PR',  short:'CAP', colors:['#c8002d','#000','#c8002d'],  crestColors:['#c8002d','#000'],     hasSquad:false },
-  { id:'goi',  name:'Goiás',         short:'GOI', colors:['#008000','#fff','#008000'],  crestColors:['#008000','#fff'],     hasSquad:false },
-  { id:'bra',  name:'Bragantino',    short:'BRA', colors:['#c8002d','#000','#fff'],     crestColors:['#c8002d','#000'],     hasSquad:false },
-  { id:'san',  name:'Santos',        short:'SAN', colors:['#fff','#000','#fff'],        crestColors:['#fff','#000'],        hasSquad:false },
-  { id:'csa',  name:'CSA',           short:'CSA', colors:['#003399','#fff','#000'],     crestColors:['#003399','#fff'],     hasSquad:false },
-  { id:'ame',  name:'América-MG',    short:'AME', colors:['#008000','#fff','#000'],     crestColors:['#008000','#fff'],     hasSquad:false },
-  { id:'cru2', name:'Ceará',         short:'CEA', colors:['#000','#fff','#000'],        crestColors:['#000','#fff'],        hasSquad:false },
-  { id:'spo',  name:'Sport',         short:'SPO', colors:['#c8002d','#000','#c8002d'],  crestColors:['#c8002d','#000'],     hasSquad:false },
-]
+const SERIE_A_BASIC: ClubBasic[] = CLUBS.map(c => ({
+  id: c.id, name: c.name, short: c.short, colors: c.colors, crestColors: c.crestColors, hasSquad: true,
+}))
 
 // Todos os jogadores com full data para busca global
 const ALL_PLAYERS_WITH_CLUB = CLUBS.flatMap(c =>
