@@ -4,7 +4,7 @@
 **Testador:** GustãoFC (usuário real)  
 **Sessão de teste:** 3+ partidas simuladas (SPFC × Corinthians, outros)  
 **Total de itens:** 15  
-**Status:** 15 abertos · 0 resolvidos
+**Status:** 10 abertos · 5 resolvidos
 
 ---
 
@@ -29,11 +29,11 @@
 
 | ID | Severidade | Status | Descrição | Como Reproduzir | Componente Suspeito |
 |----|-----------|--------|-----------|-----------------|---------------------|
-| B-01 | 🔴 Crítico | 🔲 Aberto | **Goleiro marca gol** — Rafael (GK) aparece como autor de gol em múltiplas partidas (confirmado em pelo menos 2 jogos). | Simular 3+ partidas com SPFC. Rafael aparece no log de gols. | `matchEngine.ts → pickScorer()` — não filtra `pos === 'GK'` |
-| B-02 | 🔴 Crítico | 🔲 Aberto | **Card final vermelho em vitória** — após vitória de 4×1, o card de resultado exibe cor vermelha (associada à derrota). | Vencer uma partida por placar expressivo (ex: 4×1). O card aparece com fundo vermelho. | `VictoryOverlay.tsx` — lógica de cor não lê o resultado real |
-| B-03 | 🔴 Crítico | 🔲 Aberto | **Menu Tabelas sem dados** — após 3 partidas disputadas, a tela de classificação aparece vazia, sem pontos/jogos contabilizados. | Jogar 3 rodadas → abrir Menu Tabelas → tabela exibe todos os times zerados. | `Standings.tsx` ou `useMatchStore → standings` não é atualizado pós-partida |
-| B-04 | 🟠 Alto | 🔲 Aberto | **Inconsistência na barra de força dos atletas** — no menu HOME pós-partida a barra aparece quase cheia; ao iniciar novo jogo a barra aparece bem desgastada. Não fica claro qual é o valor real. | Jogar uma partida → ver barra no menu → iniciar nova rodada → ver barra novamente. | `useLineupStore` ou `fatigue` calculado em dois momentos diferentes |
-| B-05 | 🟡 Médio | 🔲 Aberto | **Times duplicados no Mercado de Transferências** — o mesmo clube aparece listado mais de uma vez na tela de Mercado. | Abrir Mercado de Transferências → scroll na lista de clubes. | `TransferMarket.tsx` — fonte de dados de clubes com entradas repetidas |
+| B-01 | 🔴 Crítico | ✅ Resolvido | **Goleiro marca gol** — Rafael (GK) aparecia como autor de gol em múltiplas partidas. | `pickScorer()` filtrava apenas `!p.injured`, adicionado filtro `p.pos !== 'GK'`. | `matchEngine.ts → pickScorer()` |
+| B-02 | 🔴 Crítico | ✅ Resolvido | **Card final vermelho em vitória** — após vitória, o card exibia cor vermelha (gradiente `#8b0000 → #cc0000`). | Corrigido para gradiente verde escuro `#0a1f14 → #0f2d1a`. | `VictoryOverlay.tsx` |
+| B-03 | 🔴 Crítico | ✅ Resolvido | **Menu Tabelas sem dados** — tela de classificação exibia placeholder vazio pós 3 jogos. | Screen `tabelas` não estava mapeado; adicionado `StandingsScreen` no `ManagerHub`. | `ManagerHub.tsx` |
+| B-04 | 🟠 Alto | ✅ Resolvido | **Inconsistência na barra de força dos atletas** — badge mostrava `forca` base enquanto o engine usava `effectiveForca` (com penalidade de fadiga). | Badge agora exibe `effectiveForca(player)` — valor real usado no Poisson. | `ManagerHub.tsx → PlayerRow` |
+| B-05 | 🟡 Médio | ✅ Resolvido | **Times duplicados no Mercado de Transferências** — todos os 20 clubes apareciam duplicados (entrada manual + entrada de `CLUBS`). | `SERIE_A_BASIC` reescrito como `CLUBS.map(...)` sem entradas manuais. | `TransferMarket.tsx` |
 
 ---
 
@@ -71,7 +71,11 @@
 
 | ID | Data | Descrição da Correção | Commit |
 |----|------|-----------------------|--------|
-| — | — | — | — |
+| B-01 | 2026-06-12 | `pickScorer()` filtrado por `pos !== 'GK'` | `979f2c0` |
+| B-02 | 2026-06-12 | Gradiente de vitória corrigido para verde escuro | `979f2c0` |
+| B-03 | 2026-06-12 | `StandingsScreen` adicionado ao `ManagerHub` | `979f2c0` |
+| B-04 | 2026-06-12 | Badge de força usa `effectiveForca()` | `979f2c0` |
+| B-05 | 2026-06-12 | `SERIE_A_BASIC` derivado de `CLUBS.map()` | `979f2c0` |
 
 ---
 
