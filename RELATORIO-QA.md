@@ -76,14 +76,14 @@
 | B-03 | 2026-06-12 | `StandingsScreen` adicionado ao `ManagerHub` | `979f2c0` |
 | B-04 | 2026-06-12 | Badge de força usa `effectiveForca()` | `979f2c0` |
 | B-05 | 2026-06-12 | `SERIE_A_BASIC` derivado de `CLUBS.map()` | `979f2c0` |
-| U-01 | 2026-07-06 | Linguagem "▲ Forte contra / ▼ Fraco contra" no ManagerHub | — |
-| U-02 | 2026-07-06 | Emoji do Mercado 🔁 → 💸 | — |
-| U-03 | 2026-07-06 | VictoryOverlay exibe autores dos gols em vez de forças internas (`MatchEvent.scorer`) | — |
-| U-04 | 2026-07-06 | `prepareMatch()` preserva a velocidade escolhida | — |
-| U-05 | 2026-07-06 | Badge "Brasileirão · Rodada N" no Scoreboard | — |
-| U-06 | 2026-07-06 | Pausa automática aos 45min + `HalftimeOverlay` (ajustes / iniciar 2º tempo) | — |
-| G-01 | 2026-07-06 | Matriz de formações rebalanceada (4-4-2 3W/3L, sem formações invictas) + teste de mesa | — |
-| G-02 | 2026-07-06 | Sistema de lesões completo (`injuryEngine` + modal de sub obrigatória + persistência) | — |
+| U-01 | 2026-07-06 | Linguagem "▲ Forte contra / ▼ Fraco contra" no ManagerHub | `f11da61` |
+| U-02 | 2026-07-06 | Emoji do Mercado 🔁 → 💸 | `f11da61` |
+| U-03 | 2026-07-06 | VictoryOverlay exibe autores dos gols em vez de forças internas (`MatchEvent.scorer`) | `f11da61` |
+| U-04 | 2026-07-06 | `prepareMatch()` preserva a velocidade escolhida | `f11da61` |
+| U-05 | 2026-07-06 | Badge "Brasileirão · Rodada N" no Scoreboard | `f11da61` |
+| U-06 | 2026-07-06 | Pausa automática aos 45min + `HalftimeOverlay` (ajustes / iniciar 2º tempo) | `f11da61` |
+| G-01 | 2026-07-06 | Matriz de formações rebalanceada (4-4-2 3W/3L, sem formações invictas) + teste de mesa | `f11da61` |
+| G-02 | 2026-07-06 | Sistema de lesões completo (`injuryEngine` + modal de sub obrigatória + persistência) | `f11da61` |
 
 ---
 
