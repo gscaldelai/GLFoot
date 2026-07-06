@@ -84,7 +84,7 @@
 | U-06 | 2026-07-06 | Pausa automática aos 45min + `HalftimeOverlay` (ajustes / iniciar 2º tempo) | `f11da61` |
 | G-01 | 2026-07-06 | Matriz de formações rebalanceada (4-4-2 3W/3L, sem formações invictas) + teste de mesa | `f11da61` |
 | G-02 | 2026-07-06 | Sistema de lesões completo (`injuryEngine` + modal de sub obrigatória + persistência) | `f11da61` |
-| F-01 | 2026-07-06 | Técnicos NPC + Central de Empregos (`coachEngine` + `useCoachStore` + telas + bônus λ) | — |
+| F-01 | 2026-07-06 | Técnicos NPC + Central de Empregos (`coachEngine` + `useCoachStore` + telas + bônus λ) | `3f7d04d` |
 
 ---
 
