@@ -4,7 +4,7 @@
 **Testador:** GustãoFC (usuário real)  
 **Sessão de teste:** 3+ partidas simuladas (SPFC × Corinthians, outros)  
 **Total de itens:** 14  
-**Status:** 13 resolvidos · 1 suspenso · 0 abertos
+**Status:** ✅ 14 resolvidos · 0 abertos — relatório zerado
 
 ---
 
@@ -63,7 +63,7 @@
 
 | ID | Severidade | Status | Descrição | Notas de Design |
 |----|-----------|--------|-----------|-----------------|
-| F-01 | 🟠 Alto | ⏸️ Suspenso | **Central de Empregos / Técnicos de IA** — clubes não controlados por humanos não possuem técnico com nome, não fazem demissões nem contratações. O universo do modo carreira fica estático. | Cada clube deve ter um técnico NPC nomeado. Clubes devem demitir ao performar mal e contratar novo técnico do "mercado livre". Regra de balanceamento: clubes de nível alto (ex: SPFC, Flamengo) só contratam técnicos com reputação mínima equivalente. |
+| F-01 | 🟠 Alto | ✅ Resolvido | **Central de Empregos / Técnicos de IA** — clubes não controlados por humanos não possuíam técnico com nome, não faziam demissões nem contratações. O universo do modo carreira ficava estático. | `coachEngine.ts` + `useCoachStore`: 19 técnicos NPC nomeados (reputação 1–5★ por tier) + mercado livre. Demissão por desempenho (6+ posições abaixo do esperado por 5 rodadas, com proteção de 5 rodadas no cargo); contratação respeita reputação mínima por tier (S exige 4★+). Técnicos dão bônus de λ (±0.05, validado em `scripts/test-coach.js`). Jogador demitido (Premium) recebe até 3 propostas de clubes compatíveis com sua reputação (derivada do histórico) e continua a carreira no novo clube. Telas Técnicos e Central de Emprego implementadas; Free vê a Central bloqueada. ~3.7 demissões de bots/temporada. |
 
 ---
 
@@ -84,6 +84,7 @@
 | U-06 | 2026-07-06 | Pausa automática aos 45min + `HalftimeOverlay` (ajustes / iniciar 2º tempo) | `f11da61` |
 | G-01 | 2026-07-06 | Matriz de formações rebalanceada (4-4-2 3W/3L, sem formações invictas) + teste de mesa | `f11da61` |
 | G-02 | 2026-07-06 | Sistema de lesões completo (`injuryEngine` + modal de sub obrigatória + persistência) | `f11da61` |
+| F-01 | 2026-07-06 | Técnicos NPC + Central de Empregos (`coachEngine` + `useCoachStore` + telas + bônus λ) | — |
 
 ---
 

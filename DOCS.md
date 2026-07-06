@@ -117,10 +117,10 @@ AuthScreen → ClubSelect → ManagerHub ─┬─ Painel da Equipe
                                        ├─ CalendarView → Jogo → Match
                                        ├─ StadiumView
                                        ├─ TransferMarket (Mercado)
-                                       ├─ Tabelas (placeholder)
-                                       ├─ Técnicos (placeholder)
+                                       ├─ Tabelas (StandingsScreen)
+                                       ├─ Técnicos (TecnicosScreen)
                                        ├─ História (placeholder)
-                                       └─ Central de Emprego (placeholder)
+                                       └─ Central de Emprego (CentralEmpregoScreen · Premium)
 ```
 
 ---
@@ -141,7 +141,8 @@ glfoot/
 │   ├── test-poisson.js        ← validação do Poisson Engine
 │   ├── test-agecurve.js       ← validação do Age Curve (75 temporadas)
 │   ├── test-formations.js     ← balanceamento da matriz de formações (G-01)
-│   └── test-injury.js         ← calibração do Injury Engine (G-02)
+│   ├── test-injury.js         ← calibração do Injury Engine (G-02)
+│   └── test-coach.js          ← calibração do Coach Engine (F-01)
 └── src/
     ├── App.tsx                ← roteador principal (auth → select → hub/match)
     ├── main.tsx
@@ -153,6 +154,7 @@ glfoot/
     │   ├── ageCurve.ts        ← curvas de pico por posição, evolução
     │   ├── fatigueEngine.ts   ← fadiga, recuperação, semana dupla
     │   ├── injuryEngine.ts    ← lesões: risco por minuto, duração, recuperação
+    │   ├── coachEngine.ts     ← técnicos NPC: geração, demissão, contratação, bônus λ
     │   ├── forceEngine.ts     ← força online (base + forma + momentum)
     │   ├── marketEngine.ts    ← valor de mercado, passe, salário, elegibilidade
     │   └── calendarEngine.ts  ← gerador de calendário anual
@@ -177,7 +179,8 @@ glfoot/
     │   ├── LineupEditor.tsx   ← editor de escalação
     │   ├── CalendarView.tsx   ← calendário da temporada (grade + lista filtrada)
     │   ├── StadiumView.tsx    ← gestão do estádio (bilheteria + expansão)
-    │   └── TransferMarket.tsx ← mercado de transferências unificado
+    │   ├── TransferMarket.tsx ← mercado de transferências unificado
+    │   └── CoachesView.tsx    ← telas Técnicos + Central de Emprego (F-01)
     │
     ├── components/
     │   ├── Campo.tsx          ← campo SVG com posicionamento dos discos
@@ -201,6 +204,7 @@ glfoot/
         ├── useStadiumStore.ts    ← capacidade, preços, obras em curso
         ├── useConfidenceStore.ts ← medidores Diretoria e Torcida
         ├── useTransferStore.ts   ← listings de venda/empréstimo
+        ├── useCoachStore.ts      ← técnicos NPC, mercado livre, propostas (F-01)
         └── useAuthStore.ts       ← usuário autenticado e token JWT
 ```
 
@@ -364,7 +368,32 @@ fmtValue(value)                // "3.2M" ou "92 mil"
 | ZAG | R$ 3.8M | R$ 90k/mês |
 | GK  | R$ 4.0M | R$ 90k/mês |
 
-### 6.7 calendarEngine.ts
+### 6.7 coachEngine.ts — Técnicos NPC (QA F-01)
+
+Calibrado: ~3.7 demissões de bots/temporada; bônus λ máximo ±0.05 mantém a média
+de gols em 2.5–3.0 (`scripts/test-coach.js`).
+
+```typescript
+generateInitialCoaches(playerClubId) // 19 técnicos (reputação por tier) + 6 no mercado livre
+processCoachRound(coaches, standings, round, season)
+// pressão: 6+ posições abaixo do esperado → 5 rodadas seguidas = demissão
+// (proteção: 5 rodadas no cargo; liga só demite a partir da rodada 6)
+coachLambdaBonus(reputation)         // (rep − 3) × 0.025 → 5★ +0.05 · 1★ −0.05
+calcPlayerReputation(seasons)        // 1–5★: base 2 · título +1 · G4 +0.5 · Z4 −0.5
+buildPlayerOffers(rep, excludeClub)  // até 3 clubes com tier compatível
+MIN_REPUTATION_BY_TIER               // S:4★ · A:3★ · B:2★ · C:1★
+```
+
+**Bônus de λ**: aplicado nos três lugares — partida do jogador (`prepareMatch`, usando
+a reputação do jogador para o clube dele), jogos bot×bot (`nextRound`) e nada mais.
+
+**Fluxo de demissão do jogador (Premium)**: modal de demissão ganha botão
+"Ver Propostas" → `useCoachStore.generateOffers` → Central de Emprego lista até 3
+clubes compatíveis → `switchClub(clubId)` assume o novo clube na mesma temporada
+(novo contrato/orçamento/confiança, elenco reiniciado, técnico NPC vai ao mercado).
+No Free, demissão continua sendo fim de carreira.
+
+### 6.8 calendarEngine.ts
 
 Distribui competições em 52 semanas com máx. 2 jogos/semana.
 
@@ -468,7 +497,13 @@ e jogadores contratados sobrevivem ao reload. Migração de v1 zera slots/bench 
 do ManagerHub reconstrói do JSON do clube). `selectClub` limpa o lineup apenas ao trocar
 de clube — re-selecionar o mesmo clube (virada de temporada) preserva o elenco.
 
-### 7.7 useAuthStore (`glfoot-auth` v1)
+### 7.7 useCoachStore (`glfoot-coaches` v1)
+
+Técnicos NPC, mercado livre, notícias de movimentação (últimas 30) e propostas
+pendentes para o jogador demitido. `processRound` é chamado pelo `nextRound`;
+carreiras antigas ganham técnicos via backfill no mount do ManagerHub.
+
+### 7.8 useAuthStore (`glfoot-auth` v1)
 
 Usuário autenticado (`id`, `email`, `nickname`, `plan: 'free' | 'premium'`) e token JWT.
 
@@ -771,7 +806,7 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 | Velocidade 1.5× e 2× | 🔒 | ✅ |
 | Clubes com força ≤50 | ✅ | ✅ |
 | Clubes com força >50 | 🔒 | ✅ |
-| Central de Empregos | 🔒 | ✅ (TODO) |
+| Central de Empregos | 🔒 | ✅ |
 | Seleção Nacional | 🔒 | ✅ (TODO) |
 | Ver pênaltis | ✅ | ✅ |
 | Skip pênaltis | 🔒 | ✅ (TODO) |
@@ -807,7 +842,10 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 
 ### Confiança
 - `electSeasonStar()` existe no engine mas não é chamada ao fim da temporada.
-- Central de Empregos é placeholder visual.
+
+### Técnicos NPC
+- Reputação dos NPCs evolui só por demissão (−1★); títulos de bots ainda não a aumentam.
+- Nomes gerados de um pool fictício — podem repetir em carreiras longas.
 
 ### Auth
 - Backend Railway pode estar offline. Dev local requer mock via `localStorage`.

@@ -25,6 +25,8 @@ import {
 import {
   rollTeamInjury, rollInjuryDuration, applyInjury, advanceInjuryRecovery, healInjury,
 } from '@/engines/injuryEngine'
+import { coachLambdaBonus, calcPlayerReputation } from '@/engines/coachEngine'
+import { useCoachStore } from './useCoachStore'
 import { calcTicketRevenue, CLUB_STADIUM, STADIUMS } from '@/data/stadiums'
 import { useLineupStore }      from './useLineupStore'
 import { useFinanceStore }     from './useFinanceStore'
@@ -167,6 +169,7 @@ interface MatchStore {
   closeHalftime:   () => void   // fecha modal e mantém pausado (ajustes)
   startSecondHalf: () => void   // fecha modal e retoma o jogo
   resolveInjurySub: (benchIdx: number | null) => void  // null = seguir com 10
+  switchClub:      (clubId: string) => void  // aceita proposta pós-demissão (F-01)
   nextRound:       () => void
   closeSeasonEnd:  () => void
   goToMatch:       () => void
@@ -289,6 +292,7 @@ export const useMatchStore = create<MatchStore>()(
     useFinanceStore.getState().reset(initialBudget)
     useStadiumStore.getState().reset()
     useConfidenceStore.getState().reset()
+    useCoachStore.getState().initCareer(clubId)
     // Nova carreira em OUTRO clube: limpa o elenco persistido para o init()
     // reconstruir do clube escolhido. Mesmo clube (ex: virada de temporada
     // passa pelo ClubSelect) preserva o elenco atual (envelhecimento etc.).
@@ -331,8 +335,14 @@ export const useMatchStore = create<MatchStore>()(
     const bonusH = getFormationBonus(homeFormation, awayFormation)
     const bonusA = getFormationBonus(awayFormation, homeFormation)
 
-    const golsH = poissonSample(calcLambda(avH, avA, true,  bonusH))
-    const golsA = poissonSample(calcLambda(avA, avH, false, bonusA))
+    // Bônus de técnico (F-01): reputação do NPC para bots, do jogador para o meu clube
+    const coachStore = useCoachStore.getState()
+    const playerRep  = calcPlayerReputation(get().completedSeasons)
+    const repH = homeIsMe  ? playerRep : (coachStore.coachOf(home.id)?.reputation ?? 3)
+    const repA = !homeIsMe ? playerRep : (coachStore.coachOf(away.id)?.reputation ?? 3)
+
+    const golsH = poissonSample(calcLambda(avH, avA, true,  bonusH + coachLambdaBonus(repH)))
+    const golsA = poissonSample(calcLambda(avA, avH, false, bonusA + coachLambdaBonus(repA)))
     set({
       homeFormation, awayFormation,
       homeClub:   home,  awayClub:   away,
@@ -652,8 +662,12 @@ export const useMatchStore = create<MatchStore>()(
       const awayClub = CLUBS_MAP[fix.awayId]
       const avH = homeClub ? avgSquad(homeClub.squad) : (CLUB_STRENGTH.find(e => e.id === fix.homeId)?.forcaMedia ?? 65)
       const avA = awayClub ? avgSquad(awayClub.squad) : (CLUB_STRENGTH.find(e => e.id === fix.awayId)?.forcaMedia ?? 65)
-      const gh = poissonSample(calcLambda(avH, avA, true))
-      const ga = poissonSample(calcLambda(avA, avH, false))
+      // Técnicos NPC influenciam os jogos bot×bot (F-01)
+      const coachStore = useCoachStore.getState()
+      const cbH = coachLambdaBonus(coachStore.coachOf(fix.homeId)?.reputation ?? 3)
+      const cbA = coachLambdaBonus(coachStore.coachOf(fix.awayId)?.reputation ?? 3)
+      const gh = poissonSample(calcLambda(avH, avA, true,  cbH))
+      const ga = poissonSample(calcLambda(avA, avH, false, cbA))
       standings = applyResult(standings, fix.homeId, fix.awayId, gh, ga)
     }
     // Fallback: se não há fixtures (carreira antiga), simula sem fixture
@@ -724,6 +738,9 @@ export const useMatchStore = create<MatchStore>()(
       const ratio  = s.initialBudget > 0 ? fin.budget / s.initialBudget : 1
       useConfidenceStore.getState().onFinanceCheck(ratio, s.round, s.season)
     }
+
+    // ── Técnicos NPC: pressão, demissões e contratações (F-01) ─────────────
+    useCoachStore.getState().processRound(standings, s.round, s.season)
     // ──────────────────────────────────────────────────────────────────────
 
     const nextRound = s.round + 1
@@ -785,6 +802,33 @@ export const useMatchStore = create<MatchStore>()(
 
   goToMatch() { set({ screen: 'match' }) },
   goToHub()   { set({ screen: 'hub'   }) },
+
+  // Aceita proposta pós-demissão: assume outro clube na mesma temporada (F-01)
+  switchClub(clubId) {
+    const club = CLUBS_MAP[clubId]
+    if (!club) return
+
+    // Técnico NPC do clube escolhido vai para o mercado livre
+    useCoachStore.getState().acceptOffer(clubId, get().round)
+
+    // Novo contrato: meta, orçamento e confiança do novo clube
+    const strengthEntry = CLUB_STRENGTH.find(e => e.id === clubId)
+    const forcaMedia    = strengthEntry?.forcaMedia ?? 60
+    const contractGoal  = getContractGoal(strengthEntry?.tier, forcaMedia)
+    const initialBudget = calcInitialBudget(forcaMedia)
+    useFinanceStore.getState().reset(initialBudget)
+    useConfidenceStore.getState().reset()   // zera isFired e medidores
+
+    // Assume o elenco do novo clube
+    useLineupStore.getState().init([...club.squad, ...club.bench])
+
+    // Calendário e copas do novo clube
+    const clubCalendar = buildClubCalendar(clubId)
+    const cupStatus: Record<string, 'active' | 'eliminated'> = {}
+    clubCalendar.forEach(g => { cupStatus[g.competitionId] = 'active' })
+
+    set({ myClubId: clubId, contractGoal, initialBudget, clubCalendar, cupStatus, screen: 'hub' })
+  },
 
   executeTransfer(player, fromClubId, type) {
     const s    = get()

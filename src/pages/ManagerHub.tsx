@@ -6,6 +6,9 @@ import TransferMarket  from '@/pages/TransferMarket'
 import { useMatchStore }       from '@/stores/useMatchStore'
 import { useLineupStore }      from '@/stores/useLineupStore'
 import { useConfidenceStore }  from '@/stores/useConfidenceStore'
+import { useCoachStore }       from '@/stores/useCoachStore'
+import { useAuthStore }        from '@/stores/useAuthStore'
+import { TecnicosScreen, CentralEmpregoScreen } from '@/pages/CoachesView'
 import { CLUBS, CLUBS_MAP } from '@/data/clubs'
 import { getNextFixture }   from '@/engines/fixtureEngine'
 import {
@@ -61,12 +64,19 @@ const SHORTCUT_MAP: Record<string, NavScreen> = {
 }
 
 // ── Modal de Demissão ────────────────────────────────────────────────────────
-function FiredModal() {
+function FiredModal({ onViewOffers }: { onViewOffers: () => void }) {
   const firedBy   = useConfidenceStore(s => s.firedBy)
   const goToHub   = useMatchStore(s => s.goToHub)
   const coachName = useMatchStore(s => s.coachName)
+  const isPremium = useAuthStore(s => s.user?.plan === 'premium')
   // "Sair" leva de volta à seleção de clube
   const setScreen = () => useMatchStore.setState({ screen: 'select' })
+
+  function handleViewOffers() {
+    const s = useMatchStore.getState()
+    useCoachStore.getState().generateOffers(s.completedSeasons, s.myClubId)
+    onViewOffers()
+  }
 
   if (!firedBy) return null
 
@@ -106,6 +116,16 @@ function FiredModal() {
         {/* Corpo */}
         <div className="px-6 py-5">
           <p className="text-[13px] text-white/70 leading-relaxed mb-5">{msg.body}</p>
+          {isPremium && (
+            <button
+              onClick={handleViewOffers}
+              className="w-full mb-3 py-[10px] rounded-lg bg-gradient-to-br from-[#158040] to-[#20c060]
+                         font-bebas text-[15px] tracking-[2px] text-black
+                         hover:scale-[1.02] transition-transform"
+            >
+              💼 VER PROPOSTAS DE OUTROS CLUBES
+            </button>
+          )}
           <div className="flex gap-3">
             <button
               onClick={goToHub}
@@ -148,6 +168,10 @@ export default function ManagerHub() {
   const initialized = useRef(false)
   const isFired  = useConfidenceStore(s => s.isFired)
   const [screen, setScreen] = useState<NavScreen>('painel')
+  const [firedDismissed, setFiredDismissed] = useState(false)
+
+  // Reabre o modal em nova demissão
+  useEffect(() => { if (!isFired) setFiredDismissed(false) }, [isFired])
 
   // Inicializa lineup store apenas uma vez
   useEffect(() => {
@@ -155,6 +179,10 @@ export default function ManagerHub() {
     initialized.current = true
     if (useLineupStore.getState().slots.filter(Boolean).length === 0) {
       init([...myClub.squad, ...myClub.bench])
+    }
+    // Backfill: carreiras criadas antes do coach store ganham técnicos NPC (F-01)
+    if (useCoachStore.getState().coaches.length === 0) {
+      useCoachStore.getState().initCareer(myClub.id)
     }
   }, [init, myClub])
 
@@ -170,7 +198,9 @@ export default function ManagerHub() {
 
   return (
     <div className="flex flex-row flex-1 overflow-hidden">
-      {isFired && <FiredModal />}
+      {isFired && !firedDismissed && (
+        <FiredModal onViewOffers={() => { setFiredDismissed(true); setScreen('emprego') }} />
+      )}
       <IconSidebar active={screen} onNav={setScreen} myClub={myClub} />
       <main className="flex flex-1 overflow-hidden">
         {screen === 'painel'   && <PainelEquipe myClub={myClub} opp={opp} />}
@@ -178,9 +208,9 @@ export default function ManagerHub() {
         {screen === 'estadios' && <StadiumView />}
         {screen === 'mercado'  && <TransferMarket />}
         {screen === 'tabelas'  && <StandingsScreen />}
-        {screen !== 'painel' && screen !== 'jogos' && screen !== 'estadios'
-          && screen !== 'mercado' && screen !== 'tabelas'
-          && <PlaceholderScreen screen={screen} />}
+        {screen === 'tecnicos' && <TecnicosScreen />}
+        {screen === 'emprego'  && <CentralEmpregoScreen />}
+        {(screen === 'historia') && <PlaceholderScreen screen={screen} />}
       </main>
     </div>
   )
