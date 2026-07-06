@@ -126,6 +126,10 @@ function applySeasonEnd(dismissed: Set<number>) {
   const aged = applyAging(allPlayers).map(p => ({
     ...p,
     fatigue:           0,
+    // Pré-temporada cura qualquer lesão pendente (G-02)
+    injured:           false,
+    injuryRoundsLeft:  0,
+    injuryLabel:       undefined,
     contractYearsLeft: Math.max(0, p.contractYearsLeft - 1),
   }))
 

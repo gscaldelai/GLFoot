@@ -29,26 +29,32 @@ export default function BenchZone({ side, bench, colors, label }: Props) {
       </div>
 
       {bench.map((p, i) => {
-        const used = p.injured // reutilizamos o flag para "usado na sub"
-        if (used) return null
+        if (p.usedInSub) return null   // já entrou (ou saiu lesionado) nesta partida
         const w = Math.round(((p.forca - 60) / 39) * 100)
+        const dragOk = canDrag && !p.injured   // lesionado não pode entrar
 
         return (
-          <div key={i} className="flex flex-col items-center gap-[1px] flex-shrink-0">
+          <div key={i} className="flex flex-col items-center gap-[1px] flex-shrink-0"
+               title={p.injured ? `Lesionado — ${p.injuryLabel ?? ''} (${p.injuryRoundsLeft}r)` : undefined}>
             {/* Disco */}
             <div
               className={`relative w-[44px] h-[44px] rounded-full border-2 border-white/25 overflow-hidden
                           flex items-start justify-center bg-[#f0f0f0]
-                          ${canDrag ? 'cursor-grab hover:scale-110 hover:shadow-[0_4px_12px_rgba(240,192,64,.4)]' : 'opacity-50 cursor-default'}
+                          ${p.injured ? 'grayscale opacity-40 cursor-not-allowed'
+                            : dragOk ? 'cursor-grab hover:scale-110 hover:shadow-[0_4px_12px_rgba(240,192,64,.4)]'
+                            : 'opacity-50 cursor-default'}
                           transition-transform duration-150`}
-              draggable={canDrag}
+              draggable={dragOk}
               onDragStart={e => {
-                if (!canDrag) { e.preventDefault(); return }
+                if (!dragOk) { e.preventDefault(); return }
                 setDrag({ side, idx: i, player: p })
                 e.dataTransfer.effectAllowed = 'move'
               }}
               onDragEnd={() => setDrag(null)}
             >
+              {p.injured && (
+                <span className="absolute top-[1px] left-[2px] z-20 text-[10px] leading-none">🚑</span>
+              )}
               <span className="font-anton text-[11px] text-[#111] absolute top-[2px] z-10 leading-none">
                 {p.num}
               </span>

@@ -44,7 +44,7 @@ const NAV_GROUPS: Array<{ items: NavItem[] }> = [
   {
     items: [
       { id: 'tabelas',  icon: '📊', label: 'Tabelas',           shortcut: 'F5' },
-      { id: 'mercado',  icon: '🔁', label: 'Mercado',           shortcut: 'F8' },
+      { id: 'mercado',  icon: '💸', label: 'Mercado',           shortcut: 'F8' },
     ],
   },
   {
@@ -275,7 +275,7 @@ const PLACEHOLDER_INFO: Record<NavScreen, { icon: string; label: string; desc: s
   jogos:    { icon: '⚽', label: 'Jogos do Time',      desc: 'Calendário completo da temporada — partidas passadas e futuras da sua equipe.' },
   tabelas:  { icon: '📊', label: 'Tabelas',            desc: 'Classificação por pontos, saldo de gols e chaveamento (Mata-Mata) das Copas.' },
   estadios: { icon: '🏟', label: 'Estádios',           desc: 'Gerencie a capacidade do seu estádio, calcule a renda da bilheteria e expanda sua arena.' },
-  mercado:  { icon: '🔁', label: 'Mercado',            desc: 'Navegue pelos elencos, busque jogadores e gerencie transferências e empréstimos.' },
+  mercado:  { icon: '💸', label: 'Mercado',            desc: 'Navegue pelos elencos, busque jogadores e gerencie transferências e empréstimos.' },
   tecnicos: { icon: '🎖', label: 'Técnicos',           desc: 'Ranking global de treinadores com pontuação por títulos conquistados.' },
   historia: { icon: '📖', label: 'História',           desc: 'Almanaque das temporadas — campeões, evolução do ranking e conquistas.' },
   emprego:  { icon: '💼', label: 'Central de Emprego', desc: 'Clubes sem técnico, propostas recebidas e opção de pedir demissão.' },
@@ -536,9 +536,11 @@ function PlayerRow({
       className={`flex items-center gap-[5px] px-[5px] py-[4px] rounded-lg mb-[2px] cursor-pointer
                   border transition-all duration-150 select-none
                   ${isDragging ? 'opacity-40' : ''}
+                  ${player.injured ? 'opacity-60' : ''}
                   ${isSelected
                     ? 'border-gold bg-gold/10'
                     : 'border-transparent hover:border-border hover:bg-surface2'}`}
+      title={player.injured ? `Lesionado — ${player.injuryLabel ?? ''} (${player.injuryRoundsLeft} rodada${(player.injuryRoundsLeft ?? 0) > 1 ? 's' : ''})` : undefined}
       onClick={onClick}
       draggable
       onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart() }}
@@ -548,12 +550,12 @@ function PlayerRow({
     >
       {/* Indicador titular/banco */}
       <div className={`w-[3px] h-[26px] rounded-full flex-shrink-0
-                       ${isStarter ? 'bg-glgreen' : 'bg-[#3a5060]'}`} />
+                       ${player.injured ? 'bg-glred' : isStarter ? 'bg-glgreen' : 'bg-[#3a5060]'}`} />
 
       {/* Mini disco com força no canto inferior direito */}
       <div className="relative w-[34px] h-[34px] rounded-full border border-white/20 overflow-visible
                        flex items-start justify-center bg-[#f0f0f0] flex-shrink-0">
-        <div className="absolute inset-0 rounded-full overflow-hidden">
+        <div className={`absolute inset-0 rounded-full overflow-hidden ${player.injured ? 'grayscale' : ''}`}>
           <span className="font-anton text-[9px] text-[#111] absolute top-[3px] left-0 right-0 text-center z-10 leading-none">
             {player.num}
           </span>
@@ -563,6 +565,9 @@ function PlayerRow({
             <div className="absolute bottom-0 left-0 right-0" style={{ height: '20%', background: detail || bg }} />
           </div>
         </div>
+        {player.injured && (
+          <span className="absolute z-30 text-[11px] leading-none" style={{ top: -3, left: -4 }}>🚑</span>
+        )}
         <span className="font-bebas text-[9px] text-gold leading-none absolute z-20
                          bg-black/80 rounded px-[2px] py-[1px]"
               style={{ bottom: -2, right: -4 }}>
@@ -575,10 +580,16 @@ function PlayerRow({
         <div className="text-[11px] font-bold text-white truncate leading-none">{player.name}</div>
         <div className="flex items-center gap-[3px] mt-[2px]">
           <span className="text-[8px] text-[#6a8090] w-[22px] flex-shrink-0">{player.posLabel}</span>
-          <div className="flex-1 h-[2px] bg-border rounded overflow-hidden">
-            <div className="h-full rounded transition-all duration-500"
-                 style={{ width: `${stamina}%`, background: barColor }} />
-          </div>
+          {player.injured ? (
+            <span className="text-[8px] font-bold text-glred flex-shrink-0">
+              🚑 {player.injuryRoundsLeft}r
+            </span>
+          ) : (
+            <div className="flex-1 h-[2px] bg-border rounded overflow-hidden">
+              <div className="h-full rounded transition-all duration-500"
+                   style={{ width: `${stamina}%`, background: barColor }} />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -590,8 +601,13 @@ function EscalacaoPanel({ myClub, opp }: { myClub: Club; opp: Club }) {
   const prepMatch = useMatchStore(s => s.prepareMatch)
   const goToMatch = useMatchStore(s => s.goToMatch)
   const formation = useLineupStore(s => s.formation)
+  const slots     = useLineupStore(s => s.slots)
+
+  // Lesionado não pode ser escalado (G-02)
+  const injuredStarters = slots.filter((p): p is Player => !!p?.injured)
 
   function handleJogar() {
+    if (useLineupStore.getState().slots.some(p => p?.injured)) return
     const lineup   = useLineupStore.getState().getLineupForMatch()
     const benchAll = useLineupStore.getState().bench
     const round    = useMatchStore.getState().round
@@ -621,12 +637,20 @@ function EscalacaoPanel({ myClub, opp }: { myClub: Club; opp: Club }) {
           <span className="font-bebas text-[18px] tracking-widest text-white/70">{formation}</span>
         </div>
         <VerticalField colors={myClub.colors} />
+        {injuredStarters.length > 0 && (
+          <div className="text-[11px] font-bold text-glred text-center leading-snug">
+            🚑 {injuredStarters.map(p => p.name).join(', ')} lesionado{injuredStarters.length > 1 ? 's' : ''} —
+            substitua antes de jogar
+          </div>
+        )}
         <button
           onClick={handleJogar}
-          className="w-full max-w-[320px] bg-gradient-to-br from-[#158040] to-[#20c060] border-none
-                     rounded-lg py-[10px] font-bebas text-[18px] tracking-[2px] text-black
-                     cursor-pointer hover:scale-[1.02]
-                     hover:shadow-[0_4px_20px_rgba(32,192,96,.5)] transition-all duration-200"
+          disabled={injuredStarters.length > 0}
+          className={`w-full max-w-[320px] border-none rounded-lg py-[10px] font-bebas text-[18px]
+                      tracking-[2px] transition-all duration-200
+                      ${injuredStarters.length > 0
+                        ? 'bg-surface2 text-gray-500 cursor-not-allowed'
+                        : 'bg-gradient-to-br from-[#158040] to-[#20c060] text-black cursor-pointer hover:scale-[1.02] hover:shadow-[0_4px_20px_rgba(32,192,96,.5)]'}`}
         >
           ▶ JOGAR COM ESTA ESCALAÇÃO
         </button>
@@ -696,12 +720,12 @@ function FormationPickerRow() {
           <span className="text-[#7a9aaa]">{FORMATION_DESC[formation]}</span>
           {beats.length > 0 && (
             <span className="ml-2 text-emerald-400/80">
-              ✓ Bate: {beats.map(f => FORMATION_LABELS[f]).join(', ')}
+              ▲ Forte contra: {beats.map(f => FORMATION_LABELS[f]).join(', ')}
             </span>
           )}
           {losesTo.length > 0 && (
             <span className="ml-2 text-red-400/70">
-              ✗ Perde para: {losesTo.map(f => FORMATION_LABELS[f]).join(', ')}
+              ▼ Fraco contra: {losesTo.map(f => FORMATION_LABELS[f]).join(', ')}
             </span>
           )}
         </div>

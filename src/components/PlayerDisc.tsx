@@ -68,6 +68,10 @@ export default function PlayerDisc({ player, fieldIdx, side, colors, justSubbed 
         <span className="font-anton text-[11px] text-[#111] absolute top-[3px] z-10 leading-none">
           {player.num}
         </span>
+        {/* Lesionado (G-02) */}
+        {player.injured && (
+          <span className="absolute top-[1px] left-[2px] z-20 text-[10px] leading-none">🚑</span>
+        )}
         {/* Camisa (parte de baixo) */}
         <div className="absolute bottom-0 left-0 right-0 h-[62%] overflow-hidden">
           <div className="absolute inset-0" style={{ background: bg }} />

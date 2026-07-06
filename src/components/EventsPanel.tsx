@@ -8,6 +8,7 @@ const COLOR: Record<MatchEvent['type'], string> = {
   'red':       'border-l-glred  bg-[#150000]',
   'foul':      'border-l-[#e67e22] bg-[#130a00]',
   'sub':       'border-l-glgreen bg-[#0a1400]',
+  'injury':    'border-l-[#e74c3c] bg-[#1a0505]',
 }
 
 export default function EventsPanel() {

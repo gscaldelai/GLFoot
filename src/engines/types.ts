@@ -26,6 +26,9 @@ export interface Player {
   lastNotes: number[]      // notas GLfoot, recente primeiro (online)
   matchesPlayed: number    // refina potencialVisto
   injured: boolean
+  injuryRoundsLeft?: number // rodadas restantes de recuperação (0/ausente = saudável)
+  injuryLabel?: string      // tipo da lesão (ex: "Lesão muscular")
+  usedInSub?: boolean       // transitório da partida: reserva já entrou (não persiste)
   contractYearsLeft: number
   gp: number               // gols pró na temporada atual
   assists: number          // assistências na temporada atual
@@ -51,9 +54,10 @@ export interface Club {
 
 export interface MatchEvent {
   minute: number
-  type: 'goal' | 'goal-away' | 'yellow' | 'red' | 'foul' | 'sub'
+  type: 'goal' | 'goal-away' | 'yellow' | 'red' | 'foul' | 'sub' | 'injury'
   html: string
   icon?: string
+  scorer?: string   // nome do autor do gol (types 'goal' e 'goal-away')
 }
 
 export interface MatchResult {

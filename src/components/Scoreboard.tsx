@@ -18,6 +18,7 @@ export default function Scoreboard() {
   const minute    = useMatchStore(s => s.minute)
   const second    = useMatchStore(s => s.second)
   const running   = useMatchStore(s => s.running)
+  const round     = useMatchStore(s => s.round)
   const ended     = useMatchStore(s => s.ended)
   const speed     = useMatchStore(s => s.speed)
   const toggleRun      = useMatchStore(s => s.toggleRun)
@@ -84,10 +85,15 @@ export default function Scoreboard() {
         {gh}
       </div>
 
-      {/* Relógio */}
-      <div className="bg-black border border-[#243444] rounded px-[10px] py-1
-                      font-bebas text-[18px] text-gold tracking-[3px]">
-        {mm}:{ss}
+      {/* Relógio + competição */}
+      <div className="flex flex-col items-center gap-[2px]">
+        <div className="bg-black border border-[#243444] rounded px-[10px] py-1
+                        font-bebas text-[18px] text-gold tracking-[3px]">
+          {mm}:{ss}
+        </div>
+        <div className="text-[9px] text-[#5a8aa0] tracking-wide uppercase whitespace-nowrap">
+          Brasileirão · Rodada {round}
+        </div>
       </div>
 
       {/* Placar fora */}

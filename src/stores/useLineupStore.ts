@@ -63,6 +63,12 @@ function swapInStore(
   const pa = getPlayer(a)
   const pb = getPlayer(b)
 
+  // Lesionado não pode entrar em campo (G-02) — tirar de campo é permitido
+  const goesToField =
+    b.source === 'field' ? pa :
+    a.source === 'field' ? pb : null
+  if (goesToField?.injured) return { slots, bench }
+
   // Se bench→field e não há jogador na bench target, simplesmente move
   if (a.source === 'bench' && b.source === 'field' && pb === null) {
     setPlayer(b, pa)
@@ -148,9 +154,17 @@ export const useLineupStore = create<LineupStore>()(
     }),
     {
       name: 'glfoot-lineup',
-      version: 1,
-      // Persiste apenas a formação — slots e bench são reconstruídos pelo init()
-      partialize: (s) => ({ formation: s.formation }),
+      version: 2,
+      // v2: persiste slots e bench — fadiga, lesões e contratados sobrevivem ao reload.
+      // Se vazios após reidratar, o init() do ManagerHub reconstrói do JSON do clube.
+      partialize: (s) => ({ formation: s.formation, slots: s.slots, bench: s.bench }),
+      migrate: (persisted: unknown, version: number) => {
+        if (version < 2) {
+          const old = persisted as { formation?: FormationKey } | undefined
+          return { formation: old?.formation ?? '4-3-3', slots: [], bench: [] }
+        }
+        return persisted as { formation: FormationKey; slots: (Player | null)[]; bench: Player[] }
+      },
     },
   ),
 )

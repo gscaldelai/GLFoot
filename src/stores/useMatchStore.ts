@@ -22,6 +22,9 @@ import {
 import {
   effectiveAvgSquad, applyMatchFatigue, applyBenchRecovery, rollDoubleWeek,
 } from '@/engines/fatigueEngine'
+import {
+  rollTeamInjury, rollInjuryDuration, applyInjury, advanceInjuryRecovery, healInjury,
+} from '@/engines/injuryEngine'
 import { calcTicketRevenue, CLUB_STADIUM, STADIUMS } from '@/data/stadiums'
 import { useLineupStore }      from './useLineupStore'
 import { useFinanceStore }     from './useFinanceStore'
@@ -67,6 +70,23 @@ interface DragSource {
 interface GoalFlash {
   scorer: string
   isAway: boolean
+}
+
+// Substituição obrigatória pendente por lesão (time do jogador)
+interface InjurySub {
+  side:     'home' | 'away'
+  fieldIdx: number
+}
+
+// Escolhe o melhor reserva elegível para substituir um lesionado (bots)
+function pickBotReplacement(bench: Player[], out: Player): number {
+  let bestIdx = -1, bestScore = -Infinity
+  bench.forEach((p, i) => {
+    if (p.injured || p.usedInSub) return
+    const score = (p.pos === out.pos ? 1000 : 0) + p.forca
+    if (score > bestScore) { bestScore = score; bestIdx = i }
+  })
+  return bestIdx
 }
 
 import type { ContractGoal } from '@/data/clubGoals'
@@ -127,6 +147,9 @@ interface MatchStore {
   goalFlash:      GoalFlash | null
   victoryVisible: boolean
   seasonEndVisible: boolean
+  halftimeVisible: boolean   // modal de intervalo aberto
+  halftimeDone:    boolean   // intervalo já ocorreu nesta partida
+  injurySub:       InjurySub | null   // substituição obrigatória pendente (G-02)
 
   // ── screen ────────────────────────────────────────────
   screen: 'select' | 'hub' | 'match'
@@ -141,6 +164,9 @@ interface MatchStore {
   setDragSrc:      (src: DragSource | null) => void
   clearGoalFlash:  () => void
   closeVictory:    () => void
+  closeHalftime:   () => void   // fecha modal e mantém pausado (ajustes)
+  startSecondHalf: () => void   // fecha modal e retoma o jogo
+  resolveInjurySub: (benchIdx: number | null) => void  // null = seguir com 10
   nextRound:       () => void
   closeSeasonEnd:  () => void
   goToMatch:       () => void
@@ -241,6 +267,8 @@ export const useMatchStore = create<MatchStore>()(
   sideEvents: [], events: [],
   dragSrc: null, goalFlash: null,
   victoryVisible: false, seasonEndVisible: false,
+  halftimeVisible: false, halftimeDone: false,
+  injurySub: null,
   screen: 'select',
 
   selectClub(clubId, allClubs, coachName = '', coachNationality = '') {
@@ -261,6 +289,12 @@ export const useMatchStore = create<MatchStore>()(
     useFinanceStore.getState().reset(initialBudget)
     useStadiumStore.getState().reset()
     useConfidenceStore.getState().reset()
+    // Nova carreira em OUTRO clube: limpa o elenco persistido para o init()
+    // reconstruir do clube escolhido. Mesmo clube (ex: virada de temporada
+    // passa pelo ClubSelect) preserva o elenco atual (envelhecimento etc.).
+    if (get().myClubId !== clubId) {
+      useLineupStore.setState({ slots: [], bench: [], selected: null, dragSrc: null })
+    }
 
     const clubCalendar = buildClubCalendar(clubId)
 
@@ -308,12 +342,14 @@ export const useMatchStore = create<MatchStore>()(
       awayBench:  JSON.parse(JSON.stringify(away.bench)),
       subCount:   { home: 0, away: 0 },
       gh: 0, ga: 0, minute: 0, second: 0,
-      running: false, ended: false, speed: 1,
+      running: false, ended: false,   // speed mantém a última escolha do usuário (U-04)
       goalMinsH: scheduleGoalMinutes(golsH),
       goalMinsA: scheduleGoalMinutes(golsA),
       firedH: new Set(), firedA: new Set(),
       sideEvents: genSideEvents(), events: [],
       goalFlash: null, victoryVisible: false,
+      halftimeVisible: false, halftimeDone: false,
+      injurySub: null,
     })
   },
 
@@ -387,9 +423,40 @@ export const useMatchStore = create<MatchStore>()(
         }
       }
 
+      // ── Write-back de lesões para o elenco do jogador (G-02) ─────────
+      // Squads da partida são cópias — a lesão precisa voltar ao lineup store
+      const mySquadWB = isMyHome ? s.homeSquad : s.awaySquad
+      const myBenchWB = isMyHome ? s.homeBench : s.awayBench
+      const injuredNow = (isMyHome || isMyAway)
+        ? [...mySquadWB, ...myBenchWB].filter(p => p.injured && (p.injuryRoundsLeft ?? 0) > 0)
+        : []
+      if (injuredNow.length) {
+        const ls = useLineupStore.getState()
+        const hit = (x: Player) => injuredNow.find(i => i.name === x.name && i.num === x.num)
+        const mark = (p: Player) => {
+          const inj = hit(p)
+          if (!inj) return p
+          if (p.injured) return p   // já estava lesionado antes da partida — mantém contagem
+          // +1 compensa o decremento do nextRound desta mesma rodada:
+          // "fora por N rodadas" = perde exatamente as N próximas partidas
+          return { ...p, injured: true, injuryRoundsLeft: (inj.injuryRoundsLeft ?? 1) + 1, injuryLabel: inj.injuryLabel }
+        }
+        useLineupStore.setState({
+          slots: ls.slots.map(p => p ? mark(p) : null),
+          bench: ls.bench.map(mark),
+        })
+      }
+
       set({ minute: 90, second: 0, running: false, ended: true,
             standings: standings2, matchHistory: [...s.matchHistory, histRow],
-            victoryVisible: true })
+            victoryVisible: true, injurySub: null })
+      return
+    }
+
+    // Intervalo (U-06): pausa automática ao fim do 1º tempo
+    if (minute >= 45 && !s.halftimeDone) {
+      set({ minute: 45, second: 0, running: false,
+            halftimeVisible: true, halftimeDone: true })
       return
     }
 
@@ -402,6 +469,7 @@ export const useMatchStore = create<MatchStore>()(
           minute: gm, type: 'goal',
           html: `<span class="text-gold font-bold">${gm}'</span> <strong class="text-gold">GOOOL!</strong> ${scorer.name}`,
           icon: '⚽',
+          scorer: scorer.name,
         })
         goalFlash = { scorer: scorer.name, isAway: false }
       }
@@ -416,6 +484,7 @@ export const useMatchStore = create<MatchStore>()(
           minute: gm, type: 'goal-away',
           html: `<span class="text-gold font-bold">${gm}'</span> <strong class="text-[#10a050]">GOOOL!</strong> ${scorer.name}`,
           icon: '⚽',
+          scorer: scorer.name,
         })
         goalFlash = { scorer: scorer.name, isAway: true }
       }
@@ -430,8 +499,70 @@ export const useMatchStore = create<MatchStore>()(
       return ev
     })
 
-    set({ minute, second, gh, ga, firedH, firedA, events: events.slice(0, 30),
-          sideEvents, goalFlash: goalFlash ?? s.goalFlash })
+    // ── Lesões (G-02): sorteio UMA vez por minuto de jogo (não por tick) ──
+    let homeSquad = s.homeSquad, awaySquad = s.awaySquad
+    let homeBench = s.homeBench, awayBench = s.awayBench
+    let subCount  = s.subCount
+    let injurySub = s.injurySub
+    let pauseForInjury = false
+
+    if (second === 0 && minute >= 1 && !injurySub) {
+      const isMyHome = s.homeClub?.id === s.myClubId
+      for (const side of ['home', 'away'] as const) {
+        const squad = side === 'home' ? homeSquad : awaySquad
+        const idx = rollTeamInjury(squad)
+        if (idx === null) continue
+
+        const roll     = rollInjuryDuration()
+        const victim   = applyInjury(squad[idx], roll)
+        const newSquad = squad.map((p, i) => i === idx ? victim : p)
+        const isMySide = side === 'home' ? isMyHome : !isMyHome
+
+        events.unshift({
+          minute, type: 'injury',
+          html: `<span class="text-gold font-bold">${minute}'</span> 🚑 <strong>${victim.name}</strong> lesionado — ${roll.label}`
+              + (isMySide ? ` (${roll.rounds} rodada${roll.rounds > 1 ? 's' : ''})` : ''),
+        })
+
+        if (isMySide) {
+          // Meu jogador: pausa e abre modal de substituição obrigatória
+          if (side === 'home') homeSquad = newSquad; else awaySquad = newSquad
+          injurySub = { side, fieldIdx: idx }
+          pauseForInjury = true
+        } else {
+          // Bot: substituição automática pelo melhor reserva compatível
+          const bench  = side === 'home' ? homeBench : awayBench
+          const subIdx = subCount[side] < 3 ? pickBotReplacement(bench, victim) : -1
+          if (subIdx >= 0) {
+            const entering = { ...bench[subIdx], fieldPos: victim.fieldPos, usedInSub: true }
+            const finalSquad = newSquad.map((p, i) => i === idx ? entering : p)
+            const finalBench = bench.map((p, i) => i === subIdx ? { ...victim, usedInSub: true } : p)
+            if (side === 'home') { homeSquad = finalSquad; homeBench = finalBench }
+            else                 { awaySquad = finalSquad; awayBench = finalBench }
+            subCount = { ...subCount, [side]: subCount[side] + 1 }
+            events.unshift({
+              minute, type: 'sub',
+              html: `<span class="text-gold font-bold">${minute}'</span> 🔄 ${entering.name} ↑ ${victim.name} ↓`,
+            })
+          } else {
+            // Sem reserva/subs esgotadas: bot segue com um a menos
+            const finalSquad = newSquad.filter((_, i) => i !== idx)
+            const finalBench = [...bench, { ...victim, usedInSub: true }]
+            if (side === 'home') { homeSquad = finalSquad; homeBench = finalBench }
+            else                 { awaySquad = finalSquad; awayBench = finalBench }
+            events.unshift({
+              minute, type: 'injury',
+              html: `<span class="text-gold font-bold">${minute}'</span> ⚠ ${(side === 'home' ? s.homeClub : s.awayClub)?.short} segue com ${finalSquad.length} em campo`,
+            })
+          }
+        }
+      }
+    }
+
+    set({ minute, second, gh, ga, firedH, firedA, events: events.slice(0, 60),
+          sideEvents, goalFlash: goalFlash ?? s.goalFlash,
+          homeSquad, awaySquad, homeBench, awayBench, subCount, injurySub,
+          ...(pauseForInjury ? { running: false } : {}) })
   },
 
   doSub(side, fieldIdx, benchIdx) {
@@ -441,11 +572,11 @@ export const useMatchStore = create<MatchStore>()(
     const bench = side === 'home' ? [...s.homeBench] : [...s.awayBench]
     const sub   = bench[benchIdx]
     const out   = squad[fieldIdx]
-    if (!sub || sub.injured) return
+    if (!sub || sub.injured || sub.usedInSub) return
 
     const newSub = { ...sub, fieldPos: out.fieldPos }
     squad[fieldIdx] = newSub
-    const newBench = bench.map((p, i) => i === benchIdx ? { ...p, injured: true } : p)
+    const newBench = bench.map((p, i) => i === benchIdx ? { ...p, usedInSub: true } : p)
 
     const events = [...s.events]
     events.unshift({
@@ -465,6 +596,48 @@ export const useMatchStore = create<MatchStore>()(
   clearGoalFlash: () => set({ goalFlash: null }),
 
   closeVictory: () => set({ victoryVisible: false }),
+
+  closeHalftime:   () => set({ halftimeVisible: false }),
+
+  startSecondHalf: () => set({ halftimeVisible: false, running: true }),
+
+  resolveInjurySub(benchIdx) {
+    const s = get()
+    const pending = s.injurySub
+    if (!pending) return
+    const { side, fieldIdx } = pending
+    const squad  = side === 'home' ? [...s.homeSquad] : [...s.awaySquad]
+    const bench  = side === 'home' ? [...s.homeBench] : [...s.awayBench]
+    const victim = squad[fieldIdx]
+    const events = [...s.events]
+    const sub = benchIdx !== null && s.subCount[side] < 3 ? bench[benchIdx] : undefined
+
+    if (sub && !sub.injured && !sub.usedInSub) {
+      squad[fieldIdx] = { ...sub, fieldPos: victim.fieldPos, usedInSub: true }
+      bench[benchIdx!] = { ...victim, usedInSub: true }
+      events.unshift({
+        minute: s.minute, type: 'sub',
+        html: `<span class="text-gold font-bold">${s.minute}'</span> 🔄 ${sub.name} ↑ ${victim.name} ↓`,
+      })
+      set({
+        ...(side === 'home' ? { homeSquad: squad, homeBench: bench } : { awaySquad: squad, awayBench: bench }),
+        subCount: { ...s.subCount, [side]: s.subCount[side] + 1 },
+        events: events.slice(0, 60), injurySub: null, running: true,
+      })
+    } else {
+      // Sem substituição: lesionado sai e o time segue com um a menos
+      squad.splice(fieldIdx, 1)
+      bench.push({ ...victim, usedInSub: true })
+      events.unshift({
+        minute: s.minute, type: 'injury',
+        html: `<span class="text-gold font-bold">${s.minute}'</span> ⚠ ${(side === 'home' ? s.homeClub : s.awayClub)?.short} segue com ${squad.length} em campo`,
+      })
+      set({
+        ...(side === 'home' ? { homeSquad: squad, homeBench: bench } : { awaySquad: squad, awayBench: bench }),
+        events: events.slice(0, 60), injurySub: null, running: true,
+      })
+    }
+  },
 
   nextRound() {
     const s = get()
@@ -494,12 +667,20 @@ export const useMatchStore = create<MatchStore>()(
       }
     }
 
-    // ── Fadiga do time do jogador ──────────────────────────────────────────
+    // ── Fadiga + recuperação de lesões do time do jogador ─────────────────
+    // Lesionado não joga: só recupera fadiga e desconta 1 rodada da lesão
     const doubleWeek = rollDoubleWeek(s.round)
     const ls = useLineupStore.getState()
     useLineupStore.setState({
-      slots: ls.slots.map(p => p ? applyMatchFatigue(p, doubleWeek) : null),
-      bench: ls.bench.map(p => applyBenchRecovery(p, doubleWeek)),
+      slots: ls.slots.map(p => {
+        if (!p) return null
+        if (p.injured) return advanceInjuryRecovery(applyBenchRecovery(p, doubleWeek))
+        return applyMatchFatigue(p, doubleWeek)
+      }),
+      bench: ls.bench.map(p => {
+        const rec = applyBenchRecovery(p, doubleWeek)
+        return p.injured ? advanceInjuryRecovery(rec) : rec
+      }),
     })
 
     // ── Desconto de salários (a cada 4 rodadas ≈ mensalmente) ─────────────
@@ -589,8 +770,8 @@ export const useMatchStore = create<MatchStore>()(
     } else {
       const ls = useLineupStore.getState()
       useLineupStore.setState({
-        slots: ls.slots.map(p => p ? { ...p, fatigue: 0 } : null),
-        bench: ls.bench.map(p => ({ ...p, fatigue: 0 })),
+        slots: ls.slots.map(p => p ? { ...healInjury(p), fatigue: 0 } : null),
+        bench: ls.bench.map(p => ({ ...healInjury(p), fatigue: 0 })),
       })
       // Reconstrói calendário e reseta status das copas para nova temporada
       const newCalendar = s.myClubId ? buildClubCalendar(s.myClubId) : s.clubCalendar

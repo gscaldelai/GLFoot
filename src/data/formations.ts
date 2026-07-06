@@ -319,61 +319,62 @@ export const FORMATION_DESC: Record<FormationKey, string> = {
 //  +0.15 = vantagem clara      (~10% mais gols esperados)
 //  +0.20 = vantagem forte      (~14% mais gols esperados)
 //
-//  O bonus é SOMADO ao λ base do atacante e SUBTRAÍDO do λ defensor
-//  (assimétrico: só quem tem o bônus recebe — o adversário não sofre penalidade dupla)
+//  O bonus é SOMADO apenas ao λ de quem tem a vantagem — o λ do adversário
+//  não é alterado (ver prepareMatch em useMatchStore.ts)
+//
+//  Rebalanceado (QA G-01): nenhuma formação invicta, nenhuma com saldo
+//  pior que -1 exceto o 4-2-4 (alto risco por design). 4-4-2 neutro (3W/3L).
+//  Validação: node scripts/test-formations.js
 //
 export const FORMATION_MATCHUP_BONUS: Record<string, number> = {
-  // 3-5-2 supera 4-4-2 — superioridade numérica no meio
-  '3-5-2_vs_4-4-2':     0.15,
-  // 4-5-1 supera 4-3-2-1 — Mourinho: contra-ataque destrói tiki-taka
-  '4-5-1_vs_4-3-2-1':   0.15,
+  // ── Counters do 4-4-2 (apenas os canônicos) ────────────────────────────
+  '3-5-2_vs_4-4-2':     0.15, // superioridade numérica no meio (5v4, 3v2 central)
+  '3-4-3_vs_4-4-2':     0.15, // 5 atacadores sobrecarregam a linha de 4
+  '3-2-4-1_vs_4-4-2':   0.10, // box midfield moderno domina os 2 meias centrais
+  // ── Vítimas do 4-4-2 ───────────────────────────────────────────────────
+  '4-4-2_vs_4-2-4':     0.15, // meio organizado vs 2 volantes descobertos
+  '4-4-2_vs_4-3-2-1':   0.10, // meias abertos exploram a Árvore de Natal estreita
+  '4-4-2_vs_2-3-2-3':   0.10, // dois bancos de 4 vs apenas 2 defensores do Metodo
+  // ── Bloco defensivo vs posse/tiki-taka ─────────────────────────────────
+  '4-5-1_vs_4-3-2-1':   0.15, // Mourinho: contra-ataque destrói tiki-taka
   '4-1-4-1_vs_4-3-2-1': 0.12, // variante menos extrema do mesmo princípio
-  // 5-3-2 supera 3-5-2 — fecha os flancos expostos do 3-5-2
-  '5-3-2_vs_3-5-2':     0.15,
-  // 4-3-3 supera 5-4-1 — largura desmonta catenaccio
-  '4-3-3_vs_5-4-1':     0.15,
-  // 4-3-3 supera 3-5-2 — explora áreas laterais expostas
-  '4-3-3_vs_3-5-2':     0.12,
-  // 5-4-1 supera 3-4-3 — bloco defensivo absorve ataque dos 5
-  '5-4-1_vs_3-4-3':     0.15,
+  '4-5-1_vs_4-1-2-1-2': 0.10, // bloco largo de 5 meias fecha o diamante sem largura
+  // ── 5 atrás fecha sistemas de 3 zagueiros / ataque total ───────────────
+  '5-3-2_vs_3-5-2':     0.15, // fecha os flancos expostos do 3-5-2
+  '5-4-1_vs_3-4-3':     0.15, // bloco defensivo absorve ataque dos 5
   '5-4-1_vs_3-2-5':     0.15, // mesmo princípio: defesa vs ataque máximo
+  '5-4-1_vs_3-2-4-1':   0.10, // bloco baixo absorve o box midfield e sai nas costas das alas
   '5-3-2_vs_3-4-3':     0.12,
   '5-3-2_vs_3-2-5':     0.12,
-  // 3-4-3 supera 4-4-2 — 5 atacadores sobrecarregam
-  '3-4-3_vs_4-4-2':     0.15,
-  '3-4-3_vs_4-5-1':     0.12,  // pressão alta vence bloco baixo médio
-  // 4-1-2-1-2 supera 4-3-3 — vantagem numérica central
-  '4-1-2-1-2_vs_4-3-3': 0.12,
-  '4-1-2-1-2_vs_4-4-2': 0.12,
-  // 4-2-3-1 supera 4-5-1 — criatividade rompe bloqueio defensivo
+  // ── Largura desmonta blocos e 3-zagueiros ──────────────────────────────
+  '4-3-3_vs_5-4-1':     0.15, // largura desmonta catenaccio
+  '4-3-3_vs_3-5-2':     0.12, // explora áreas laterais expostas
+  '3-4-3_vs_4-5-1':     0.12, // pressão alta vence bloco baixo médio
+  // ── Superioridade central ──────────────────────────────────────────────
+  '4-1-2-1-2_vs_4-3-3': 0.12, // diamante ganha o meio do 4-3-3
+  '3-5-2_vs_4-2-3-1':   0.10, // 5 meias sobrecarregam 4
+  '3-5-2_vs_4-1-3-2':   0.10, // 5 no meio sobrecarregam o volante isolado
+  // ── Criatividade rompe bloqueio defensivo ──────────────────────────────
   '4-2-3-1_vs_4-5-1':   0.12,
   '4-2-3-1_vs_4-1-4-1': 0.10,
   '4-2-3-1_vs_5-4-1':   0.12,
-  // 4-4-2 supera 4-2-4 — meio campo bem organizado vs 2 vol descobertos
-  '4-4-2_vs_4-2-4':     0.15,
+  // ── Anti-4-2-4 (quem tem meio pune o ataque total) ─────────────────────
   '4-5-1_vs_4-2-4':     0.15,
   '4-1-4-1_vs_4-2-4':   0.12,
-  // 4-3-2-1 supera por posse e triangulação
-  '4-3-2-1_vs_4-4-2':   0.10,
-  '4-3-2-1_vs_3-5-2':   0.10,
   '4-3-2-1_vs_4-2-4':   0.12, // tiki-taka sufoca o 4-2-4 sem meio
-  // 4-1-3-2 — dupla de ataque explora zagueiros expostos
+  // ── 4-3-2-1 por posse e triangulação ───────────────────────────────────
+  '4-3-2-1_vs_3-5-2':   0.10,
+  // ── 4-1-3-2 — dupla de ataque explora zagueiros expostos ───────────────
   '4-1-3-2_vs_3-4-3':   0.10,
   '4-1-3-2_vs_4-3-3':   0.10,
-  '4-1-3-2_vs_3-2-5':   0.12, // 2 atacantes vs 3 zags históricos
-  // 3-5-2 supera 4-2-3-1 — 5 meias sobrecarregam 4
-  '3-5-2_vs_4-2-3-1':   0.10,
-  // 3-2-4-1 — transição rápida explora times lentos a reorganizar
+  // ── 3-2-4-1 — transição rápida explora times lentos a reorganizar ──────
   '3-2-4-1_vs_4-5-1':   0.12,
-  '3-2-4-1_vs_4-4-2':   0.10,
-  // 3-2-5 — ataque histórico extremo domina times sem defesa organizada
-  '3-2-5_vs_4-2-3-1':   0.12,
+  // ── Duelos históricos (WM × Metodo × ataque total) ─────────────────────
+  '3-2-5_vs_4-2-3-1':   0.12, // ataque extremo vs defesa moderna desatenta
   '3-2-5_vs_4-2-4':     0.12, // dois ataques se chocam, WM mais organizado
-  '3-2-5_vs_2-3-2-3':   0.10,
-  // 2-3-2-3 — Metodo compacto bate formações planas
-  '2-3-2-3_vs_4-4-2':   0.10,
+  '2-3-2-3_vs_3-2-5':   0.12, // Metodo de Pozzo foi desenhado para neutralizar o WM
   '2-3-2-3_vs_4-2-4':   0.12,
-  // 4-2-4 — superioridade ofensiva quando adversário não fecha
+  // ── 4-2-4 — superioridade ofensiva quando adversário não fecha ─────────
   '4-2-4_vs_5-4-1':     0.12,
   '4-2-4_vs_5-3-2':     0.10,
   '4-2-4_vs_2-3-2-3':   0.10,
@@ -407,7 +408,9 @@ export function assignToFormation(
   formationKey: FormationKey,
 ): { slots: (Player | null)[]; bench: Player[] } {
   const slotDefs = FORMATIONS[formationKey]
-  const pool     = [...allPlayers]
+  // Lesionados não são escalados — vão para o fim do banco (G-02)
+  const injured  = allPlayers.filter(p => p.injured)
+  const pool     = allPlayers.filter(p => !p.injured)
   const result: (Player | null)[] = new Array(slotDefs.length).fill(null)
 
   function pickFor(posType: SlotDef['posType']): Player | null {
@@ -440,7 +443,7 @@ export function assignToFormation(
     })
   }
 
-  return { slots: result, bench: pool }
+  return { slots: result, bench: [...pool, ...injured] }
 }
 
 // Converte slot do campo vertical → fieldPos para o campo horizontal da partida

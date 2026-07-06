@@ -127,6 +127,7 @@ export function generateYouth(clubId: string, pos: Pos): Player {
     lastNotes:         [],
     matchesPlayed:     0,
     injured:           false,
+    injuryRoundsLeft:  0,
     contractYearsLeft: 4,
     foot:              'D' as const,
     nationality:       'BRA',

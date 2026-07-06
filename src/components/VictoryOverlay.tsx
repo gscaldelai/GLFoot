@@ -1,12 +1,10 @@
 import { useMatchStore } from '@/stores/useMatchStore'
-import { avgSquad } from '@/engines/matchEngine'
 
 export default function VictoryOverlay() {
   const visible    = useMatchStore(s => s.victoryVisible)
   const homeClub   = useMatchStore(s => s.homeClub)
   const awayClub   = useMatchStore(s => s.awayClub)
-  const homeSquad  = useMatchStore(s => s.homeSquad)
-  const awaySquad  = useMatchStore(s => s.awaySquad)
+  const events     = useMatchStore(s => s.events)
   const gh         = useMatchStore(s => s.gh)
   const ga         = useMatchStore(s => s.ga)
   const myClubId   = useMatchStore(s => s.myClubId)
@@ -29,6 +27,10 @@ export default function VictoryOverlay() {
                    : drew ? `${homeClub.short} ${gh} × ${ga} ${awayClub.short} — Um ponto cada.`
                    :        `${homeClub.short} ${gh} × ${ga} ${awayClub.short} — Levantar a cabeça!`
 
+  // eventos chegam mais recentes primeiro — reverte para ordem cronológica
+  const goalsHome = events.filter(e => e.type === 'goal').reverse()
+  const goalsAway = events.filter(e => e.type === 'goal-away').reverse()
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[300]"
          style={{ backdropFilter: 'blur(2px)' }}>
@@ -47,20 +49,24 @@ export default function VictoryOverlay() {
           {bodyText}
         </div>
 
-        {/* Stats */}
-        <div className="flex gap-3 justify-center mb-5">
-          {[
-            { v: gh,                   l: 'Gols Casa'  },
-            { v: avgSquad(homeSquad),   l: 'Força Casa' },
-            { v: avgSquad(awaySquad),   l: 'Força Fora' },
-            { v: ga,                   l: 'Gols Fora'  },
-          ].map(({ v, l }) => (
-            <div key={l} className="bg-black/30 rounded-lg px-3 py-[6px] text-center">
-              <div className="font-bebas text-[22px] text-gold leading-none">{v}</div>
-              <div className="text-[9px] tracking-wide text-gray-400 uppercase mt-1">{l}</div>
+        {/* Autores dos gols */}
+        {(gh > 0 || ga > 0) && (
+          <div className="flex gap-3 justify-center mb-5 text-[11px] leading-relaxed">
+            <div className="flex-1 text-right text-gray-300">
+              <div className="text-[9px] tracking-wide text-gray-500 uppercase mb-1">{homeClub.short}</div>
+              {goalsHome.map((e, i) => (
+                <div key={i}>⚽ {e.scorer} {e.minute}'</div>
+              ))}
             </div>
-          ))}
-        </div>
+            <div className="w-px bg-white/15" />
+            <div className="flex-1 text-left text-gray-300">
+              <div className="text-[9px] tracking-wide text-gray-500 uppercase mb-1">{awayClub.short}</div>
+              {goalsAway.map((e, i) => (
+                <div key={i}>⚽ {e.scorer} {e.minute}'</div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Botão */}
         <div className="flex justify-center">

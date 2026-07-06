@@ -20,20 +20,28 @@ export default function LineupEditor() {
   const goToMatch = useMatchStore(s => s.goToMatch)
   const init      = useLineupStore(s => s.init)
   const formation = useLineupStore(s => s.formation)
+  const slots     = useLineupStore(s => s.slots)
+
+  // Lesionado não pode ser escalado (G-02)
+  const injuredStarters = slots.filter((p): p is Player => !!p?.injured)
 
   const myClub = CLUBS.find(c => c.id === myClubId) ?? CLUBS[0]
   const opp    = CLUBS.find(c => c.id !== myClubId) ?? CLUBS[1]
 
-  // Inicializa apenas na primeira vez com o elenco completo
+  // Inicializa apenas na primeira vez com o elenco completo.
+  // Guard de slots vazios: não sobrescreve o lineup persistido (fadiga/lesões).
   const initialized = useRef(false)
   useEffect(() => {
     if (!initialized.current) {
       initialized.current = true
-      init([...myClub.squad, ...myClub.bench])
+      if (useLineupStore.getState().slots.filter(Boolean).length === 0) {
+        init([...myClub.squad, ...myClub.bench])
+      }
     }
   }, [init, myClub])
 
   function handleJogar() {
+    if (useLineupStore.getState().slots.some(p => p?.injured)) return
     const lineup    = useLineupStore.getState().getLineupForMatch()
     const benchAll  = useLineupStore.getState().bench
     const isHome    = useMatchStore.getState().round % 2 === 1
@@ -60,11 +68,20 @@ export default function LineupEditor() {
         <VerticalField colors={myClub.colors} />
 
         {/* Botão jogar */}
+        {injuredStarters.length > 0 && (
+          <div className="mt-2 text-[11px] font-bold text-glred text-center leading-snug">
+            🚑 {injuredStarters.map(p => p.name).join(', ')} lesionado{injuredStarters.length > 1 ? 's' : ''} —
+            substitua antes de jogar
+          </div>
+        )}
         <button
           onClick={handleJogar}
-          className="mt-3 bg-gradient-to-br from-[#158040] to-[#20c060] border-none rounded-lg
-                     px-8 py-[10px] font-bebas text-[18px] tracking-[2px] text-black cursor-pointer
-                     hover:scale-[1.04] hover:shadow-[0_4px_20px_rgba(32,192,96,.5)] transition-all duration-200"
+          disabled={injuredStarters.length > 0}
+          className={`mt-3 border-none rounded-lg px-8 py-[10px] font-bebas text-[18px] tracking-[2px]
+                      transition-all duration-200
+                      ${injuredStarters.length > 0
+                        ? 'bg-surface2 text-gray-500 cursor-not-allowed'
+                        : 'bg-gradient-to-br from-[#158040] to-[#20c060] text-black cursor-pointer hover:scale-[1.04] hover:shadow-[0_4px_20px_rgba(32,192,96,.5)]'}`}
         >
           ▶ JOGAR COM ESTA ESCALAÇÃO
         </button>
@@ -252,6 +269,9 @@ function SlotDisc({ slotIdx, slot, player, colors }: SlotDiscProps) {
             <span className="font-anton text-[11px] text-[#111] absolute top-[3px] z-10 leading-none">
               {player.num}
             </span>
+            {player.injured && (
+              <span className="absolute top-[1px] left-[2px] z-20 text-[10px] leading-none">🚑</span>
+            )}
             <div className="absolute bottom-0 left-0 right-0 h-[62%] overflow-hidden">
               <div className="absolute inset-0" style={{ background: bg }} />
               <div className="absolute left-0 right-0" style={{ top: '30%', height: '28%', background: stripe }} />
@@ -329,11 +349,15 @@ function BenchPanel({ colors }: { colors: [string, string, string] }) {
               onDrop={e => { e.preventDefault(); dropOn({ source: 'bench', idx: i }) }}
             >
               {/* Mini disco */}
-              <div className="relative w-[34px] h-[34px] rounded-full border border-white/20 overflow-hidden
-                               flex items-start justify-center bg-[#f0f0f0] flex-shrink-0">
+              <div className={`relative w-[34px] h-[34px] rounded-full border border-white/20 overflow-hidden
+                               flex items-start justify-center bg-[#f0f0f0] flex-shrink-0
+                               ${player.injured ? 'grayscale opacity-60' : ''}`}>
                 <span className="font-anton text-[10px] text-[#111] absolute top-[2px] z-10 leading-none">
                   {player.num}
                 </span>
+                {player.injured && (
+                  <span className="absolute top-[1px] left-[2px] z-20 text-[9px] leading-none">🚑</span>
+                )}
                 <div className="absolute bottom-0 left-0 right-0 h-[62%] overflow-hidden">
                   <div className="absolute inset-0" style={{ background: bg }} />
                   <div className="absolute left-0 right-0" style={{ top: '30%', height: '28%', background: stripe }} />
@@ -346,7 +370,12 @@ function BenchPanel({ colors }: { colors: [string, string, string] }) {
                 <div className="text-[11px] font-bold text-white truncate leading-tight">
                   {player.name}
                 </div>
-                <div className="text-[9px] text-[#6a8090]">{player.posLabel}</div>
+                <div className="text-[9px] text-[#6a8090]">
+                  {player.posLabel}
+                  {player.injured && (
+                    <span className="ml-1 font-bold text-glred">🚑 {player.injuryRoundsLeft}r</span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1 mt-[2px]">
                   <span className="font-bebas text-[13px] text-gold leading-none">{player.forca}</span>
                   <div className="flex-1 h-[2px] bg-border rounded overflow-hidden">

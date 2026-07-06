@@ -1,10 +1,10 @@
 # GLfoot — Relatório de QA
 **Versão testada:** Modo Carreira v0.x  
-**Data:** 2026-06-12  
+**Data:** 2026-06-12 · atualizado 2026-07-06  
 **Testador:** GustãoFC (usuário real)  
 **Sessão de teste:** 3+ partidas simuladas (SPFC × Corinthians, outros)  
-**Total de itens:** 15  
-**Status:** 10 abertos · 5 resolvidos
+**Total de itens:** 14  
+**Status:** 13 resolvidos · 1 suspenso · 0 abertos
 
 ---
 
@@ -41,12 +41,12 @@
 
 | ID | Severidade | Status | Descrição | Comportamento Esperado |
 |----|-----------|--------|-----------|------------------------|
-| U-01 | 🟢 Baixo | 🔲 Aberto | **Linguagem de vantagem de formação** — seção de formação exibe "Bate" e "Perde para" para indicar relações táticas. | Substituir por "Forte contra ▲" e "Fraco contra ▼" para linguagem mais intuitiva. |
-| U-02 | 🟢 Baixo | 🔲 Aberto | **Emoji do Mercado pouco representativo** — o ícone da seção Mercado de Transferências não remete a transferências/negociação. | Usar emoji ou ícone mais sugestivo (ex: 💸, 🤝, 📋). |
-| U-03 | 🟡 Médio | 🔲 Aberto | **Card de vitória expõe dado interno** — o card final exibe "Força Casa" e "Força Fora" como valores numéricos, que são dados internos do engine. | Ocultar ou substituir por informação relevante ao usuário (ex: posse, finalizações). |
-| U-04 | 🟡 Médio | 🔲 Aberto | **Velocidade do jogo não persiste entre rodadas** — ao iniciar nova rodada, o seletor de velocidade volta para 1×, obrigando o usuário a reselecionar a cada partida. | Lembrar a última velocidade escolhida e iniciar a próxima partida com ela pré-selecionada. |
-| U-05 | 🟡 Médio | 🔲 Aberto | **Card de partida sem identificação do campeonato** — o card próximo ao placar mostra os times, mas não qual competição/rodada pertence o jogo. | Exibir: "Vasco × SPFC · Rodada 2 · Brasileirão" (ou similar). |
-| U-06 | 🟠 Alto | 🔲 Aberto | **Sem pausa no intervalo do 1º tempo** — o jogo passa dos 45min direto para o 2º tempo sem oferecer ao usuário a possibilidade de fazer ajustes táticos ou substituições. | Ao chegar nos 45min, pausar automaticamente e exibir tela/modal de intervalo com elenco, opções de substituição e confirmação para iniciar o 2º tempo. |
+| U-01 | 🟢 Baixo | ✅ Resolvido | **Linguagem de vantagem de formação** — seção de formação exibia "Bate" e "Perde para" para indicar relações táticas. | Substituído por "▲ Forte contra" e "▼ Fraco contra". |
+| U-02 | 🟢 Baixo | ✅ Resolvido | **Emoji do Mercado pouco representativo** — o ícone da seção Mercado de Transferências não remetia a transferências/negociação. | Trocado 🔁 por 💸 (sidebar e cabeçalho da seção). |
+| U-03 | 🟡 Médio | ✅ Resolvido | **Card de vitória expõe dado interno** — o card final exibia "Força Casa" e "Força Fora" como valores numéricos, que são dados internos do engine. | Substituído pela lista de autores dos gols de cada time (nome + minuto). |
+| U-04 | 🟡 Médio | ✅ Resolvido | **Velocidade do jogo não persiste entre rodadas** — ao iniciar nova rodada, o seletor de velocidade voltava para 1×, obrigando o usuário a reselecionar a cada partida. | `prepareMatch()` não reseta mais `speed` — a última velocidade escolhida é mantida. |
+| U-05 | 🟡 Médio | ✅ Resolvido | **Card de partida sem identificação do campeonato** — o card próximo ao placar mostrava os times, mas não qual competição/rodada pertence o jogo. | Badge "Brasileirão · Rodada N" exibido sob o relógio no Scoreboard. |
+| U-06 | 🟠 Alto | ✅ Resolvido | **Sem pausa no intervalo do 1º tempo** — o jogo passava dos 45min direto para o 2º tempo sem oferecer ao usuário a possibilidade de fazer ajustes táticos ou substituições. | Aos 45min o jogo pausa automaticamente e exibe modal de intervalo com placar, substituições restantes, botão "Fazer ajustes" (mantém pausado para mexer no time) e "Iniciar 2º tempo". |
 
 ---
 
@@ -54,8 +54,8 @@
 
 | ID | Severidade | Status | Descrição | Observação |
 |----|-----------|--------|-----------|------------|
-| G-01 | 🟠 Alto | 🔲 Aberto | **4-4-2 é o sistema mais fraco** — a formação mais tradicional do futebol real aparece perdendo para a maioria dos outros sistemas disponíveis, o que não condiz com a realidade tática. | Reanalisar a matriz de bônus/penalidades entre formações. 4-4-2 deve ser equilibrado (neutro ou levemente positivo contra maioria). |
-| G-02 | 🟠 Alto | 🔲 Aberto | **Ausência de sistema de lesões** — nenhum jogador pode se lesionar durante partidas, removendo um elemento fundamental de gestão de elenco. | Implementar probabilidade de lesão (por contato, fadiga alta, idade), duração variável e substituição obrigatória caso o lesionado seja titular em campo. |
+| G-01 | 🟠 Alto | ✅ Resolvido | **4-4-2 é o sistema mais fraco** — a formação mais tradicional do futebol real aparecia perdendo para a maioria dos outros sistemas (1 vitória × 6 derrotas na matriz). | Matriz `FORMATION_MATCHUP_BONUS` rebalanceada: 4-4-2 agora é 3W/3L com counters canônicos (perde para 3-5-2, 3-4-3 e 3-2-4-1; vence 4-2-4, 4-3-2-1 e 2-3-2-3). Nenhuma formação ficou invicta; só o 4-2-4 mantém saldo negativo forte (alto risco por design). Validação automatizada: `scripts/test-formations.js`. |
+| G-02 | 🟠 Alto | ✅ Resolvido | **Ausência de sistema de lesões** — nenhum jogador podia se lesionar durante partidas, removendo um elemento fundamental de gestão de elenco. | `injuryEngine.ts`: probabilidade por minuto de jogo ponderada por idade, fadiga e posição (GK se lesiona menos); duração 1–16 rodadas em 4 gravidades. Titular do jogador lesionado → jogo pausa e abre modal de substituição obrigatória (sem opções → segue com 10). Bots fazem auto-substituição. Recuperação decrementa a cada rodada; cura total na pré-temporada. Lesionado não pode ser escalado (botão JOGAR bloqueado + troca para campo bloqueada) e aparece com 🚑 em todas as telas de elenco. Calibração: ~6 lesões/clube/temporada (`scripts/test-injury.js`). |
 
 ---
 
@@ -76,6 +76,14 @@
 | B-03 | 2026-06-12 | `StandingsScreen` adicionado ao `ManagerHub` | `979f2c0` |
 | B-04 | 2026-06-12 | Badge de força usa `effectiveForca()` | `979f2c0` |
 | B-05 | 2026-06-12 | `SERIE_A_BASIC` derivado de `CLUBS.map()` | `979f2c0` |
+| U-01 | 2026-07-06 | Linguagem "▲ Forte contra / ▼ Fraco contra" no ManagerHub | — |
+| U-02 | 2026-07-06 | Emoji do Mercado 🔁 → 💸 | — |
+| U-03 | 2026-07-06 | VictoryOverlay exibe autores dos gols em vez de forças internas (`MatchEvent.scorer`) | — |
+| U-04 | 2026-07-06 | `prepareMatch()` preserva a velocidade escolhida | — |
+| U-05 | 2026-07-06 | Badge "Brasileirão · Rodada N" no Scoreboard | — |
+| U-06 | 2026-07-06 | Pausa automática aos 45min + `HalftimeOverlay` (ajustes / iniciar 2º tempo) | — |
+| G-01 | 2026-07-06 | Matriz de formações rebalanceada (4-4-2 3W/3L, sem formações invictas) + teste de mesa | — |
+| G-02 | 2026-07-06 | Sistema de lesões completo (`injuryEngine` + modal de sub obrigatória + persistência) | — |
 
 ---
 

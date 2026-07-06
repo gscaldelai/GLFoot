@@ -3,6 +3,8 @@ import Campo        from '@/components/Campo'
 import EventsPanel  from '@/components/EventsPanel'
 import GoalOverlay  from '@/components/GoalOverlay'
 import VictoryOverlay from '@/components/VictoryOverlay'
+import HalftimeOverlay from '@/components/HalftimeOverlay'
+import InjurySubModal from '@/components/InjurySubModal'
 
 export default function Match() {
   return (
@@ -14,6 +16,8 @@ export default function Match() {
       </div>
       <GoalOverlay />
       <VictoryOverlay />
+      <HalftimeOverlay />
+      <InjurySubModal />
     </div>
   )
 }

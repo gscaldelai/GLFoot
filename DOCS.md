@@ -139,7 +139,9 @@ glfoot/
 │   └── index.html             ← referência visual (NÃO editar)
 ├── scripts/
 │   ├── test-poisson.js        ← validação do Poisson Engine
-│   └── test-agecurve.js       ← validação do Age Curve (75 temporadas)
+│   ├── test-agecurve.js       ← validação do Age Curve (75 temporadas)
+│   ├── test-formations.js     ← balanceamento da matriz de formações (G-01)
+│   └── test-injury.js         ← calibração do Injury Engine (G-02)
 └── src/
     ├── App.tsx                ← roteador principal (auth → select → hub/match)
     ├── main.tsx
@@ -150,6 +152,7 @@ glfoot/
     │   ├── matchEngine.ts     ← Poisson Engine (gols, lambda, scorer)
     │   ├── ageCurve.ts        ← curvas de pico por posição, evolução
     │   ├── fatigueEngine.ts   ← fadiga, recuperação, semana dupla
+    │   ├── injuryEngine.ts    ← lesões: risco por minuto, duração, recuperação
     │   ├── forceEngine.ts     ← força online (base + forma + momentum)
     │   ├── marketEngine.ts    ← valor de mercado, passe, salário, elegibilidade
     │   └── calendarEngine.ts  ← gerador de calendário anual
@@ -183,7 +186,9 @@ glfoot/
     │   ├── Scoreboard.tsx     ← placar, cronômetro, velocidade
     │   ├── EventsPanel.tsx    ← log de eventos da partida
     │   ├── GoalOverlay.tsx    ← animação de gol
-    │   ├── VictoryOverlay.tsx ← tela de fim de jogo
+    │   ├── VictoryOverlay.tsx ← tela de fim de jogo (com autores dos gols)
+    │   ├── HalftimeOverlay.tsx← modal de intervalo aos 45min
+    │   ├── InjurySubModal.tsx ← substituição obrigatória por lesão
     │   ├── Standings.tsx      ← tabela de classificação
     │   ├── ClubCrest.tsx      ← escudo SVG gerado pelas cores do clube
     │   ├── Shirt.tsx          ← camisa SVG miniatura
@@ -298,7 +303,29 @@ rollDoubleWeek(round)          // probabilidade de semana dupla por rodada
 withBotFatigue(club)           // simula fadiga para clubes bot
 ```
 
-### 6.4 forceEngine.ts — Força Online
+### 6.4 injuryEngine.ts — Lesões (QA G-02)
+
+Calibrado: ~6 lesões por clube por temporada de 38 rodadas (`scripts/test-injury.js`).
+
+```typescript
+injuryRiskPerMinute(p)       // BASE 0.00012 × idade × (1 + fadiga×1.2) × posição (GK ×0.4)
+rollTeamInjury(squad)        // sorteia lesão do time em 1 minuto; retorna idx ou null
+rollInjuryDuration()         // leve 1–2 (55%) · moderada 3–5 (30%) · séria 6–10 (12%) · grave 11–16 (3%)
+applyInjury(p, roll)         // marca injured + injuryRoundsLeft + injuryLabel
+advanceInjuryRecovery(p)     // −1 rodada por nextRound; cura ao chegar a 0
+healInjury(p)                // cura total (virada de temporada)
+```
+
+**Fluxo em partida** (`useMatchStore.tick`, 1 sorteio por minuto de jogo):
+- Titular **do jogador** lesionado → jogo pausa + `InjurySubModal` (substituição obrigatória; sem opções → segue com 10). A substituição consome 1 das 3.
+- Jogador **bot** → auto-substituição pelo melhor reserva compatível.
+- No fim do jogo, lesões do time do jogador voltam ao `useLineupStore` (write-back com +1 para compensar o decremento do `nextRound` da mesma rodada — "fora por N rodadas" = perde exatamente as N próximas).
+
+**Regras de elenco:** lesionado não pode ser escalado (botão JOGAR bloqueado nos dois pontos, troca banco→campo bloqueada no `swapInStore`, `assignToFormation` filtra e manda para o fim do banco). Badge 🚑 com rodadas restantes em PlayerRow, SlotDisc, BenchPanel, BenchZone e PlayerDisc.
+
+> O flag transitório `usedInSub` marca reserva já utilizado na partida — antes disso o campo `injured` era reaproveitado para esse fim.
+
+### 6.5 forceEngine.ts — Força Online
 
 ```
 Força Final = Base(50%) + Forma(35%) + Momentum(15%)
@@ -313,7 +340,7 @@ driftBase(base, notaGL, potencial)  // drift 2%/jogo
 updateAfterMatch(player, sofascoreNote)
 ```
 
-### 6.5 marketEngine.ts — Valores e Mercado
+### 6.6 marketEngine.ts — Valores e Mercado
 
 ```typescript
 calcMarketValue(player)        // BASE × (forca/50) × ageFactor × potBonus × starBonus
@@ -337,7 +364,7 @@ fmtValue(value)                // "3.2M" ou "92 mil"
 | ZAG | R$ 3.8M | R$ 90k/mês |
 | GK  | R$ 4.0M | R$ 90k/mês |
 
-### 6.6 calendarEngine.ts
+### 6.7 calendarEngine.ts
 
 Distribui competições em 52 semanas com máx. 2 jogos/semana.
 
@@ -432,9 +459,14 @@ Persiste estado do estádio entre sessões.
 Controla quais jogadores estão listados para venda/empréstimo.  
 Chave: `${clubId}_${playerNum}`.
 
-### 7.6 useLineupStore
+### 7.6 useLineupStore (`glfoot-lineup` v2)
 
 Escalação atual: 11 slots titulares + banco. Suporta drag-and-drop e substituições.
+
+**v2 persiste `slots` e `bench`** (antes só `formation`) — fadiga, lesões, envelhecimento
+e jogadores contratados sobrevivem ao reload. Migração de v1 zera slots/bench (o `init()`
+do ManagerHub reconstrói do JSON do clube). `selectClub` limpa o lineup apenas ao trocar
+de clube — re-selecionar o mesmo clube (virada de temporada) preserva o elenco.
 
 ### 7.7 useAuthStore (`glfoot-auth` v1)
 
@@ -762,6 +794,16 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 ### Estádio
 - Estado do estádio (capacidade, preços) não é resetado entre temporadas.
 - "Semanas de obra" não avançam automaticamente com o calendário.
+
+### Lesões
+- Lesões de **bots** existem só durante a partida contra o jogador (auto-sub) — não persistem
+  entre rodadas (bots não têm estado de elenco; `CLUBS_MAP` é estático).
+- Jogos bot×bot no `nextRound` não sorteiam lesões.
+
+### Temporadas
+- **Fluxo de virada de temporada quebrado** (pré-existente): `closeSeasonEnd` volta para a
+  tela de seleção e o `selectClub` reseta `season: 1`, orçamento e contratações. Corrigir em
+  sessão dedicada (ver tarefa "Corrigir fluxo de virada de temporada").
 
 ### Confiança
 - `electSeasonStar()` existe no engine mas não é chamada ao fim da temporada.
