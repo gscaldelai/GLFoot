@@ -527,6 +527,28 @@ e colidiria com os coaches persistidos).
 ### 7.8 useAuthStore (`glfoot-auth` v1)
 
 Usuário autenticado (`id`, `email`, `nickname`, `plan: 'free' | 'premium'`) e token JWT.
+É o único store **global ao browser** — guarda quem está logado.
+
+### 7.9 userScope — isolamento da persistência por usuário (R-10)
+
+`src/stores/userScope.ts` namespaceia os 7 stores de jogo por `userId`, para que dois
+usuários na mesma máquina não compartilhem nem sobrescrevam a carreira um do outro.
+Cada store grava em `glfoot-<store>::u_<id>` (ex.: `glfoot-career::u_42`); deslogado
+usa um escopo descartável `::u_guest`.
+
+Como a chave só é conhecida **depois** do login, os 7 stores usam `skipHydration: true`
+(ficam nos defaults no import) e a hidratação é dirigida por `initUserScope()`, chamado
+no `main.tsx` **antes do render**. A cada login/logout (via `subscribe` no `useAuthStore`)
+o `syncUserScope(userId)`: (1) re-aponta a chave de cada store (`persist.setOptions`),
+(2) zera a memória para os defaults — senão um usuário novo veria os dados do anterior,
+pois o `rehydrate` faz *merge* e não limparia as chaves ausentes — e (3) re-hidrata o
+save do usuário. Uma escrita final (`setState({...getState()})`) faz a persistência
+convergir para o estado atual: sem ela, a gravação adiada do throttle do `glfoot-career`
+poderia assentar o `initial` do reset sobre o save recém-restaurado.
+
+**Migração:** o primeiro usuário a logar adota os saves antigos sem namespace (flag
+`glfoot-scope-migrated` garante que só ele herde o save compartilhado); os originais
+ficam órfãos, inócuos.
 
 ---
 

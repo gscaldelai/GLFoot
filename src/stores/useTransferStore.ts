@@ -65,6 +65,6 @@ export const useTransferStore = create<TransferStore>()(
 
       clearAll() { set({ listings: {} }) },
     }),
-    { name: 'glfoot-transfers', version: 1 },
+    { name: 'glfoot-transfers', version: 1, skipHydration: true },
   ),
 )

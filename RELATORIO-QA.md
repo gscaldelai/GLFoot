@@ -4,7 +4,7 @@
 **Testador:** GustãoFC (usuário real) + revisão adversarial automatizada (12/07)  
 **Sessão de teste:** 3+ partidas simuladas (SPFC × Corinthians, outros)  
 **Total de itens:** 14 originais (todos resolvidos) + backlog R-xx da revisão de 12/07  
-**Status:** ✅ 22 resolvidos · 🔍 11 achados a triar (seção "Revisão adversarial 12/07")
+**Status:** ✅ 23 resolvidos · 🔍 10 achados a triar (seção "Revisão adversarial 12/07")
 
 ---
 
@@ -137,11 +137,23 @@ triagem (pode haver falsos positivos). Severidade estimada pelo finder.
   o elenco reverte ao JSON do novo clube, os comprados sumiam do jogo pelo resto da carreira.
   *Corrigido*: `acquiredPlayers: []` no `switchClub`. Verificado: 2 comprados → 0 ao assumir o Flamengo.
 
+**Triado e resolvido em 13/07 (estrutural)** (confirmado e verificado no browser):
+- ✅ **R-10** 🟠 Os 7 stores de jogo persistiam em chaves fixas globais ao browser
+  (`glfoot-career`, `-finance`, ...). Dois usuários na mesma máquina compartilhavam — e
+  sobrescreviam — a carreira um do outro. *Corrigido*: novo módulo `userScope.ts` namespaceia
+  a persistência por `userId` (`glfoot-career::u_<id>` etc.). Os stores usam `skipHydration`
+  (ficam nos defaults) e a hidratação é dirigida no boot e a cada login/logout: re-aponta a
+  chave, zera a memória (senão um usuário novo veria os dados do anterior via merge) e re-hidrata
+  o save do usuário. `glfoot-auth` continua global de propósito. Inclui migração única (o 1º
+  usuário adota o save legado sem namespace) e um ajuste no throttle do R-05 (flush ao trocar de
+  chave + convergência da escrita final, senão o save se perderia no logout/2º F5). Verificado:
+  isolamento A×B (B não vê a carreira de A; A intacta ao voltar), logout zera a memória, F5 (e o
+  2º F5 consecutivo) preserva a carreira, migração do legado adotada só pelo 1º usuário.
+
 **A triar:**
 
 | ID | Sev. | Descrição | Onde |
 |----|------|-----------|------|
-| R-10 | 🟠 | Stores de jogo são globais ao browser, não por usuário — trocar de conta entrega/destrói a carreira de outro usuário | `useAuthStore.ts` |
 | R-11 | 🔴 | TransferMarket com filtro "Todos os clubes" passa `selectedClubId` como `fromClubId` — permite recomprar o mesmo jogador infinitamente / duplicar o próprio | `TransferMarket.tsx` |
 | R-12 | 🟠 | Gating premium do ClubSelect contornável: `handleStart`/`pickRandom` ignoram `isAvailableOnFree` | `ClubSelect.tsx` |
 | R-13 | 🟠 | Dispensa no SeasonEndOverlay chaveada por `num` — colisão de números dispensa/duplica o jogador errado | `SeasonEndOverlay.tsx` |
@@ -154,4 +166,4 @@ triagem (pode haver falsos positivos). Severidade estimada pelo finder.
 
 ---
 
-*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Próxima sessão de QA: triagem dos R-10..R-19*
+*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Próxima sessão de QA: triagem dos R-11..R-19*

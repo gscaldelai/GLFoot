@@ -109,6 +109,6 @@ export const useFinanceStore = create<FinanceStore>()(
         set({ budget: initialBudget, transactions: [] })
       },
     }),
-    { name: 'glfoot-finance', version: 1 },
+    { name: 'glfoot-finance', version: 1, skipHydration: true },
   ),
 )

@@ -260,6 +260,10 @@ function throttledStorage<T>(ms: number): PersistStorage<T> {
       return str ? JSON.parse(str) : null
     },
     setItem: (name, value) => {
+      // Troca de chave (ex.: userScope re-aponta no login/logout) grava a
+      // pendência anterior ANTES de enfileirar a nova — senão o save do
+      // usuário que sai se perderia (R-05 × R-10)
+      if (pending && pending.name !== name) flush()
       pending = { name, value }
       if (!timer) timer = setTimeout(flush, ms)
     },
@@ -918,6 +922,7 @@ export const useMatchStore = create<MatchStore>()(
   {
     name: 'glfoot-career',
     version: 1,
+    skipHydration: true,   // hidratação dirigida por userScope (R-10)
     storage: throttledStorage(1000),
     partialize: (s) => ({
       myClubId:        s.myClubId,

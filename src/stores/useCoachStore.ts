@@ -81,6 +81,6 @@ export const useCoachStore = create<CoachStore>()(
 
       reset: () => set({ coaches: [], news: [], playerOffers: [] }),
     }),
-    { name: 'glfoot-coaches', version: 1 },
+    { name: 'glfoot-coaches', version: 1, skipHydration: true },
   ),
 )

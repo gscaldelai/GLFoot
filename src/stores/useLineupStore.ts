@@ -155,6 +155,7 @@ export const useLineupStore = create<LineupStore>()(
     {
       name: 'glfoot-lineup',
       version: 2,
+      skipHydration: true,   // hidratação dirigida por userScope (R-10)
       // v2: persiste slots e bench — fadiga, lesões e contratados sobrevivem ao reload.
       // Se vazios após reidratar, o init() do ManagerHub reconstrói do JSON do clube.
       partialize: (s) => ({ formation: s.formation, slots: s.slots, bench: s.bench }),

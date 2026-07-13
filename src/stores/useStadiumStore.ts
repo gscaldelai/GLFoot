@@ -114,6 +114,6 @@ export const useStadiumStore = create<StadiumStore>()(
         set({ currentCapacity: {}, tierPrices: {}, completedStages: {}, inProgress: {} })
       },
     }),
-    { name: 'glfoot-stadium', version: 1 },
+    { name: 'glfoot-stadium', version: 1, skipHydration: true },
   ),
 )

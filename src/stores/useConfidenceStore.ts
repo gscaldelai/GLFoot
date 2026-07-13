@@ -308,6 +308,6 @@ export const useConfidenceStore = create<ConfidenceStore>()(
         })
       },
     }),
-    { name: 'glfoot-confidence', version: 1 },
+    { name: 'glfoot-confidence', version: 1, skipHydration: true },
   ),
 )
