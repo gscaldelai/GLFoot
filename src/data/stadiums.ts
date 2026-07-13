@@ -118,7 +118,7 @@ export const STADIUMS: Record<string, Stadium> = {
   // ── PALMEIRAS ───────────────────────────────────────────
   allianz: {
     id: 'allianz', name: 'Allianz Parque',
-    clubId: 'palmeiras', city: 'São Paulo', state: 'SP',
+    clubId: 'palm', city: 'São Paulo', state: 'SP',
     capacity: 43_713, maxCapacity: Math.round(43_713 * 1.25), yearBuilt: 2014,
     photo: 'Allianz_Parque.jpg',
     tiers: TIERS_MEDIO,
@@ -309,7 +309,7 @@ export const STADIUMS: Record<string, Stadium> = {
 // ── Mapa clube → estádio ─────────────────────────────────
 export const CLUB_STADIUM: Record<string, string> = {
   spfc:      'morumbi',
-  palmeiras: 'allianz',
+  palm:      'allianz',
   cor:       'neo_quimica',
   san:       'vila_belmiro',
   bra:       'nabi_chedid',

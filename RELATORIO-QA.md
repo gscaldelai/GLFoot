@@ -207,12 +207,23 @@ verificados no browser (checks via `window.glfoot` + fluxo pela UI):
   *Corrigido*: `processRound`/`processCoachRound` recebem `playerClubId` (via `s.myClubId`) e pulam o
   clube do jogador no laço de contratação. Verificado: com o comportamento antigo (sem o id) o SPFC
   ganhava "Adenor Sampaio"; com o fix o SPFC fica sem NPC e os 19 bots de `CLUB_STRENGTH` seguem todos
-  com técnico. (Nota lateral pré-existente: `palm` no `clubs/index` não casa com o id `palmeiras` do
-  `CLUB_STRENGTH` — fora do escopo deste lote.)
+  com técnico.
 - ✅ **R-19** 🟢 `onSeasonTurnover` não limpava `news`, então as movimentações de técnicos da temporada
   anterior vazavam para a nova (a UI mostra só "R{round}", sem temporada, ficando ambíguas).
   *Corrigido*: `onSeasonTurnover` zera `news: []` (mantendo o reset de `hiredRound`/`pressure` do R-06).
   Verificado: 2 notícias + técnicos com `hiredRound 36`/`pressure 3` → `news: 0` e `0/0` após a virada.
+
+**Extra — id divergente do Palmeiras (achado na verificação do R-18):**
+- ✅ **X-01** 🟠 O clube jogável Palmeiras tem id `palm` (`clubs/index`, elenco, dropdown), mas
+  `CLUB_STRENGTH`, `CLUB_STADIUM`, `CLUB_COMPETITIONS` e o estádio (`stadiums.ts`) usavam `palmeiras`.
+  Como esses lookups são por id, escolher o Palmeiras caía em fallback: sem força/tier (meta e orçamento
+  errados), `isAvailableOnFree('palm')` retornava `true` (liberado no Free indevidamente), sem estádio e
+  só com o Brasileirão no calendário; e como bot ele ficava "sem técnico" e sem escudo na tela Técnicos.
+  *Corrigido*: unificado para `palm` nos 4 pontos (`clubStrength.ts`, `calendarEngine.ts`, `stadiums.ts` ×2).
+  Verificado no browser: `getClubStrength('palm')` → tier A/74.4; `isAvailableOnFree('palm')` → false;
+  `CLUB_STADIUM['palm']` → `allianz`; carreira do Palmeiras com meta "top4", orçamento R$10M e as 4
+  competições (paulistão/liberta/copa BR/brasileirão); como bot, técnico "Lisca Luxemburgo (5★)" e a
+  linha na tela Técnicos renderiza igual aos demais clubes (escudo + técnico). `tsc` e `test:engine` passam.
 
 ---
 

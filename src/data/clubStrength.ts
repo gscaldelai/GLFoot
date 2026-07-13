@@ -11,7 +11,7 @@ export const CLUB_STRENGTH: ClubStrengthEntry[] = [
   { id:'fla',  name:'Flamengo',      division:1, forcaMedia:78,   tier:'S' },
   { id:'atl',  name:'Atlético-MG',   division:1, forcaMedia:76,   tier:'S' },
   // ── Tier A ──────────────────────────────────────────────────
-  { id:'palmeiras', name:'Palmeiras',division:1, forcaMedia:74.4, tier:'A' },
+  { id:'palm', name:'Palmeiras',division:1, forcaMedia:74.4, tier:'A' },
   { id:'spfc', name:'São Paulo FC',  division:1, forcaMedia:73,   tier:'A' },
   { id:'bot',  name:'Botafogo',      division:1, forcaMedia:73,   tier:'A' },
   { id:'int',  name:'Internacional', division:1, forcaMedia:72,   tier:'A' },

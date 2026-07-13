@@ -167,7 +167,7 @@ function findSlot(load: number[], start: number, end: number): number {
 // Reflete a realidade do Brasileirão 2026
 export const CLUB_COMPETITIONS: Record<string, string[]> = {
   spfc:      ['paulistao',        'libertadores',  'copa_brasil', 'brasileirao'],
-  palmeiras: ['paulistao',        'libertadores',  'copa_brasil', 'brasileirao'],
+  palm:      ['paulistao',        'libertadores',  'copa_brasil', 'brasileirao'],
   fla:       ['carioca',          'libertadores',  'copa_brasil', 'brasileirao'],
   atl:       ['mineiro',          'libertadores',  'copa_brasil', 'brasileirao'],
   bot:       ['carioca',          'sulamericana',  'copa_brasil', 'brasileirao'],
