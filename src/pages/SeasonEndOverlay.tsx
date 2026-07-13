@@ -17,6 +17,13 @@ function sortByPos(players: Player[]): Player[] {
   return [...players].sort((a, b) => POS_ORDER.indexOf(a.pos) - POS_ORDER.indexOf(b.pos))
 }
 
+// Identidade única de um jogador no elenco. num sozinho colide (entre
+// titulares/reservas e, sobretudo, após contratações que trazem jogadores
+// de outros clubes com o mesmo número — R-13), então combinamos nome + número.
+function playerKey(p: Player): string {
+  return `${p.name}_${p.num}`
+}
+
 type Phase = 'result' | 'aging' | 'contracts' | 'star'
 
 // ── Componente principal ──────────────────────────────────
@@ -29,7 +36,22 @@ export default function SeasonEndOverlay() {
   const closeSeasonEnd = useMatchStore(s => s.closeSeasonEnd)
 
   const [phase, setPhase]       = useState<Phase>('result')
-  const [dismissed, setDismissed] = useState<Set<number>>(new Set())
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+
+  // Elenco atual — para calcular o envelhecimento uma única vez (R-14)
+  const slots = useLineupStore(s => s.slots)
+  const bench = useLineupStore(s => s.bench)
+
+  // R-14: applyAging é estocástico (gaussian/Math.random). Calcula o
+  // envelhecimento UMA vez por sessão do overlay e reaproveita o MESMO
+  // resultado para exibir (Evolução/Contratos) e para aplicar ao elenco,
+  // garantindo que o valor mostrado seja exatamente o persistido. Chaveado por
+  // playerKey (name+num) — num sozinho colide após contratações (R-13).
+  const agedByKey = useMemo(() => {
+    const all = [...slots.filter(Boolean) as Player[], ...bench]
+    return new Map(applyAging(all).map(p => [playerKey(p), p]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, season])
 
   if (!visible) return null
 
@@ -78,8 +100,8 @@ export default function SeasonEndOverlay() {
       {/* ── Conteúdo por fase ── */}
       <div className="flex-1 overflow-y-auto">
         {phase === 'result'    && <PhaseResult myPos={myPos} myRow={myRow} champion={champion} isChamp={isChamp} relegated={relegated} completedSeasons={completedSeasons} />}
-        {phase === 'aging'     && <PhaseAging dismissed={dismissed} />}
-        {phase === 'contracts' && <PhaseContracts dismissed={dismissed} setDismissed={setDismissed} />}
+        {phase === 'aging'     && <PhaseAging dismissed={dismissed} agedByKey={agedByKey} />}
+        {phase === 'contracts' && <PhaseContracts dismissed={dismissed} setDismissed={setDismissed} agedByKey={agedByKey} />}
         {phase === 'star'      && <PhaseStar myClubId={myClubId} />}
       </div>
 
@@ -98,7 +120,7 @@ export default function SeasonEndOverlay() {
             if (phase === 'aging')     { setPhase('contracts'); return }
             if (phase === 'contracts') { setPhase('star'); return }
             // Fase final — aplica tudo e avança temporada
-            applySeasonEnd(dismissed)
+            applySeasonEnd(dismissed, agedByKey)
             closeSeasonEnd()
             setPhase('result')
             setDismissed(new Set())
@@ -114,7 +136,7 @@ export default function SeasonEndOverlay() {
 }
 
 // ── Aplica aging + contratos ao useLineupStore no momento de confirmar ────────
-function applySeasonEnd(dismissed: Set<number>) {
+function applySeasonEnd(dismissed: Set<string>, agedByKey: Map<string, Player>) {
   const ls  = useLineupStore.getState()
   const fin = useFinanceStore.getState()
 
@@ -123,18 +145,23 @@ function applySeasonEnd(dismissed: Set<number>) {
     ...ls.bench,
   ]
 
-  const aged = applyAging(allPlayers).map(p => ({
-    ...p,
-    fatigue:           0,
-    // Pré-temporada cura qualquer lesão pendente (G-02)
-    injured:           false,
-    injuryRoundsLeft:  0,
-    injuryLabel:       undefined,
-    contractYearsLeft: Math.max(0, p.contractYearsLeft - 1),
-  }))
+  // R-14: aplica o MESMO envelhecimento já exibido nas fases (snapshot único
+  // do overlay), não um novo sorteio. Fallback ao próprio jogador se faltar.
+  const aged = allPlayers.map(p => {
+    const a = agedByKey.get(playerKey(p)) ?? p
+    return {
+      ...a,
+      fatigue:           0,
+      // Pré-temporada cura qualquer lesão pendente (G-02)
+      injured:           false,
+      injuryRoundsLeft:  0,
+      injuryLabel:       undefined,
+      contractYearsLeft: Math.max(0, a.contractYearsLeft - 1),
+    }
+  })
 
-  const kept    = aged.filter(p => !dismissed.has(p.num))
-  const dismissed_ = aged.filter(p => dismissed.has(p.num))
+  const kept    = aged.filter(p => !dismissed.has(playerKey(p)))
+  const dismissed_ = aged.filter(p => dismissed.has(playerKey(p)))
 
   // Registra rescisões no financeiro (semana 38 = round 38 aprox)
   const s = useMatchStore.getState()
@@ -148,13 +175,13 @@ function applySeasonEnd(dismissed: Set<number>) {
 
   // Redistribui os titulares (mantém formação, remove dispensados dos slots)
   const newSlots = ls.slots.map(p =>
-    p && !dismissed.has(p.num)
-      ? (kept.find(k => k.num === p.num) ?? null)
+    p && !dismissed.has(playerKey(p))
+      ? (kept.find(k => playerKey(k) === playerKey(p)) ?? null)
       : null
   )
   const newBench = ls.bench
-    .filter(p => !dismissed.has(p.num))
-    .map(p => kept.find(k => k.num === p.num) ?? p)
+    .filter(p => !dismissed.has(playerKey(p)))
+    .map(p => kept.find(k => playerKey(k) === playerKey(p)) ?? p)
 
   useLineupStore.setState({ slots: newSlots, bench: newBench })
 }
@@ -243,7 +270,7 @@ function StatItem({ label, value, signed }: { label: string; value: number; sign
 // ════════════════════════════════════════════════════════
 //  Fase 2 — Age Curve (evolução dos jogadores)
 // ════════════════════════════════════════════════════════
-function PhaseAging({ dismissed }: { dismissed: Set<number> }) {
+function PhaseAging({ dismissed, agedByKey }: { dismissed: Set<string>; agedByKey: Map<string, Player> }) {
   const slots = useLineupStore(s => s.slots)
   const bench = useLineupStore(s => s.bench)
 
@@ -252,13 +279,15 @@ function PhaseAging({ dismissed }: { dismissed: Set<number> }) {
     ...bench,
   ]), [slots, bench])
 
-  const agedPlayers = useMemo(() => applyAging(allPlayers), [allPlayers])
-
-  const pairs = allPlayers.map((p, i) => ({
-    before: p,
-    after:  agedPlayers[i],
-    delta:  Math.round((agedPlayers[i].forca - p.forca) * 10) / 10,
-  })).filter(pair => !dismissed.has(pair.before.num))
+  // R-14: usa o envelhecimento único do overlay (por playerKey), não novo sorteio
+  const pairs = allPlayers.map(p => {
+    const after = agedByKey.get(playerKey(p)) ?? p
+    return {
+      before: p,
+      after,
+      delta:  Math.round((after.forca - p.forca) * 10) / 10,
+    }
+  }).filter(pair => !dismissed.has(playerKey(pair.before)))
 
   return (
     <div className="max-w-[640px] mx-auto px-6 py-6">
@@ -282,7 +311,7 @@ function PhaseAging({ dismissed }: { dismissed: Set<number> }) {
             {pairs.map(({ before, after, delta }) => {
               const deltaColor = delta > 0 ? '#20c060' : delta < 0 ? '#c04040' : '#5a7080'
               return (
-                <tr key={before.num} className="border-b border-border/40 hover:bg-surface2">
+                <tr key={playerKey(before)} className="border-b border-border/40 hover:bg-surface2">
                   <td className="py-[6px] pl-4 font-medium text-white/80">{before.name}</td>
                   <td className="py-[6px] text-center text-[#5a7080]">{before.pos}</td>
                   <td className="py-[6px] text-center text-[#5a7080]">
@@ -306,9 +335,10 @@ function PhaseAging({ dismissed }: { dismissed: Set<number> }) {
 // ════════════════════════════════════════════════════════
 //  Fase 3 — Contratos
 // ════════════════════════════════════════════════════════
-function PhaseContracts({ dismissed, setDismissed }: {
-  dismissed:    Set<number>
-  setDismissed: (s: Set<number>) => void
+function PhaseContracts({ dismissed, setDismissed, agedByKey }: {
+  dismissed:    Set<string>
+  setDismissed: (s: Set<string>) => void
+  agedByKey:    Map<string, Player>
 }) {
   const slots  = useLineupStore(s => s.slots)
   const bench  = useLineupStore(s => s.bench)
@@ -319,23 +349,25 @@ function PhaseContracts({ dismissed, setDismissed }: {
     ...bench,
   ]), [slots, bench])
 
-  // Aplica aging provisório para mostrar contratos já com idades futuras
-  const aged = useMemo(() => applyAging(allPlayers).map(p => ({
-    ...p,
-    contractYearsLeft: Math.max(0, p.contractYearsLeft - 1),
-  })), [allPlayers])
+  // R-14: reaproveita o envelhecimento único do overlay (mesmos valores
+  // exibidos e aplicados); aqui só decrementa o contrato p/ exibir idades futuras.
+  const aged = useMemo(() => allPlayers.map(p => {
+    const a = agedByKey.get(playerKey(p)) ?? p
+    return { ...a, contractYearsLeft: Math.max(0, a.contractYearsLeft - 1) }
+  }), [allPlayers, agedByKey])
 
-  function toggle(num: number) {
+  function toggle(p: Player) {
+    const k = playerKey(p)
     const next = new Set(dismissed)
-    next.has(num) ? next.delete(num) : next.add(num)
+    next.has(k) ? next.delete(k) : next.add(k)
     setDismissed(next)
   }
 
   const totalRescisao = aged
-    .filter(p => dismissed.has(p.num))
+    .filter(p => dismissed.has(playerKey(p)))
     .reduce((s, p) => s + calcSalary(p) * 3, 0)
 
-  const expiring = aged.filter(p => p.contractYearsLeft === 0 && !dismissed.has(p.num))
+  const expiring = aged.filter(p => p.contractYearsLeft === 0 && !dismissed.has(playerKey(p)))
 
   return (
     <div className="max-w-[640px] mx-auto px-6 py-6 flex flex-col gap-4">
@@ -361,10 +393,10 @@ function PhaseContracts({ dismissed, setDismissed }: {
           </thead>
           <tbody>
             {aged.map(p => {
-              const isDismissed = dismissed.has(p.num)
+              const isDismissed = dismissed.has(playerKey(p))
               const contractAlert = p.contractYearsLeft === 0
               return (
-                <tr key={p.num}
+                <tr key={playerKey(p)}
                   className={`border-b border-border/40 transition-colors
                                ${isDismissed ? 'opacity-40 bg-glred/5' : contractAlert ? 'bg-gold/5' : 'hover:bg-surface2'}`}
                 >
@@ -390,7 +422,7 @@ function PhaseContracts({ dismissed, setDismissed }: {
                     {fmtSalary(calcSalary(p))}
                   </td>
                   <td className="py-[6px] pr-4 text-center">
-                    <button onClick={() => toggle(p.num)}
+                    <button onClick={() => toggle(p)}
                       className={`px-2 py-[3px] rounded text-[10px] font-bold border transition-all
                                   ${isDismissed
                                     ? 'border-glred/40 bg-glred/15 text-glred'

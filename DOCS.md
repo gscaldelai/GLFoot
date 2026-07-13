@@ -441,6 +441,13 @@ Estado central da carreira e da partida ao vivo.
   (sorteio novo) e volta **direto ao hub** na temporada seguinte. Elenco, orçamento,
   estádio, técnicos NPC e confiança são preservados (mesma carreira).
 
+**SeasonEndOverlay:** o envelhecimento (`applyAging`, estocástico) é calculado **uma única
+vez** por sessão do overlay (`useMemo` em `[visible, season]`, num `Map` por `playerKey`)
+e o MESMO snapshot é usado para exibir (fases Evolução/Contratos) e para aplicar ao elenco —
+senão o valor mostrado divergiria do salvo (R-14). A dispensa é identificada por
+`playerKey` (name+num), não por `num` puro, que colide após contratações trazerem jogadores
+de outros clubes com o mesmo número (R-13).
+
 **Persistência (`glfoot-career` v1):** `screen: 'match'` nunca é gravado (persiste
 `'hub'` — F5 no meio da partida volta ao hub e a rodada é re-disputada, pois o estado
 da partida ao vivo é transitório). No `onRehydrateStorage`, saves com `round > 38`

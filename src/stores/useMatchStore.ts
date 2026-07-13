@@ -895,6 +895,11 @@ export const useMatchStore = create<MatchStore>()(
     const passe = calcPasse(player)
     const sal   = calcSalary(player)
 
+    // Guarda: não faz sentido contratar/emprestar um jogador do próprio clube (R-11)
+    if (fromClubId === s.myClubId) {
+      return { ok: false, msg: 'Este jogador já pertence ao seu clube.' }
+    }
+
     if (type === 'buy') {
       const needed = passe + sal * 6
       if (fin.budget < needed) {

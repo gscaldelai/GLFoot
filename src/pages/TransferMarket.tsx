@@ -145,6 +145,17 @@ export default function TransferMarket() {
     }))
   }, [filterAllClubs, realClub, allPlayers])
 
+  // Clube REAL de origem do jogador selecionado. Com "Todos os clubes" ativo,
+  // selectedClubId aponta para o clube da árvore (não o dono do jogador), então
+  // buscamos o clubId verdadeiro na linha do sourcePool para não quebrar a chave
+  // de dedup de acquiredPlayers nem permitir recompra infinita (R-11)
+  const selectedFromClubId = useMemo(() => {
+    if (!selectedPlayer) return selectedClubId
+    if (!filterAllClubs) return selectedClubId
+    const row = sourcePool.find(r => r.player.num === selectedPlayer.num && r.player.name === selectedPlayer.name)
+    return row?.clubId ?? selectedClubId
+  }, [selectedPlayer, filterAllClubs, sourcePool, selectedClubId])
+
   const filteredRows = useMemo(() => sourcePool.filter(({ player: p, clubId }) => {
     if (acquiredKeys.has(`${clubId}_${p.num}`)) return false  // já adquirido
     if (filterName    && !p.name.toLowerCase().includes(filterName.toLowerCase())) return false
@@ -562,8 +573,8 @@ export default function TransferMarket() {
                     enabled={!!selectedPlayer && (loanEligibility?.allowed ?? false)}
                     tooltip={loanEligibility?.reason}
                     onClick={() => {
-                      if (!selectedPlayer || !selectedClubId) return
-                      const result = executeTransfer(selectedPlayer, selectedClubId, 'loan')
+                      if (!selectedPlayer || !selectedFromClubId) return
+                      const result = executeTransfer(selectedPlayer, selectedFromClubId, 'loan')
                       setTransferMsg({ ok: result.ok, text: result.msg })
                       if (result.ok) setSelectedPlayer(null)
                       setTimeout(() => setTransferMsg(null), 3000)
@@ -572,8 +583,8 @@ export default function TransferMarket() {
                     enabled={!!selectedPlayer && (buyEligibility?.allowed ?? false)}
                     tooltip={buyEligibility?.reason}
                     onClick={() => {
-                      if (!selectedPlayer || !selectedClubId) return
-                      const result = executeTransfer(selectedPlayer, selectedClubId, 'buy')
+                      if (!selectedPlayer || !selectedFromClubId) return
+                      const result = executeTransfer(selectedPlayer, selectedFromClubId, 'buy')
                       setTransferMsg({ ok: result.ok, text: result.msg })
                       if (result.ok) setSelectedPlayer(null)
                       setTimeout(() => setTransferMsg(null), 3000)

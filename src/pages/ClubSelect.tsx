@@ -53,17 +53,28 @@ export default function ClubSelect() {
     )
   }
 
+  // Um clube só é jogável se o usuário é premium ou o clube é liberado no free.
+  // Centraliza o gating para valer em TODOS os caminhos (dropdown, aleatório, iniciar).
+  const canUseClub = (id: string) => isPremium || isAvailableOnFree(id)
+
   function pickRandom() {
-    const pick = CLUBS[Math.floor(Math.random() * CLUBS.length)]
+    // Sorteia apenas entre clubes permitidos pelo plano — não vaza clube premium no free
+    const pool = CLUBS.filter(c => canUseClub(c.id))
+    if (pool.length === 0) return
+    const pick = pool[Math.floor(Math.random() * pool.length)]
     setSelectedId(pick.id)
   }
 
   function handleStart() {
     if (!coachName.trim()) return
+    const pool = CLUBS.filter(c => canUseClub(c.id))
     const target = random
-      ? CLUBS[Math.floor(Math.random() * CLUBS.length)]
+      ? pool[Math.floor(Math.random() * pool.length)]
       : selected
-    if (target) selectClub(target.id, CLUBS, coachName.trim(), nationality)
+    // Revalida o gating antes de assumir o clube: bloqueia a seleção default (CLUBS[0])
+    // ou o sorteio caírem num clube premium enquanto o usuário está no plano free
+    if (!target || !canUseClub(target.id)) return
+    selectClub(target.id, CLUBS, coachName.trim(), nationality)
   }
 
   return (

@@ -4,7 +4,7 @@
 **Testador:** GustãoFC (usuário real) + revisão adversarial automatizada (12/07)  
 **Sessão de teste:** 3+ partidas simuladas (SPFC × Corinthians, outros)  
 **Total de itens:** 14 originais (todos resolvidos) + backlog R-xx da revisão de 12/07  
-**Status:** ✅ 23 resolvidos · 🔍 10 achados a triar (seção "Revisão adversarial 12/07")
+**Status:** ✅ 27 resolvidos · 🔍 6 achados a triar (seção "Revisão adversarial 12/07")
 
 ---
 
@@ -150,14 +150,42 @@ triagem (pode haver falsos positivos). Severidade estimada pelo finder.
   isolamento A×B (B não vê a carreira de A; A intacta ao voltar), logout zera a memória, F5 (e o
   2º F5 consecutivo) preserva a carreira, migração do legado adotada só pelo 1º usuário.
 
+**Triados e resolvidos em 13/07 (lote R-11..R-14)** — cada um passou por investigação +
+verificação adversarial (2 céticos por achado) num workflow multiagente, depois confirmado
+no browser:
+- ✅ **R-11** 🔴 No filtro "Todos os clubes" a compra/empréstimo passava `selectedClubId`
+  (o clube da árvore) como `fromClubId`, não o clube REAL do jogador. A chave de dedup de
+  `acquiredPlayers` (`fromClubId_num`) divergia da chave da tabela (`clubReal_num`), então o
+  jogador nunca sumia da lista → recompra infinita (paga passe e duplica no banco a cada clique);
+  e como `executeTransfer` não barrava `fromClubId === myClubId`, dava para "comprar" o próprio
+  jogador. *Corrigido*: novo `selectedFromClubId` deriva o dono real da linha do `sourcePool` e é
+  usado nas duas ações; guarda em `executeTransfer` bloqueia contratar do próprio clube.
+  Verificado: comprar o Rony (Palmeiras) no modo global gravou `fromClubId: 'palm'` e o removeu da
+  lista (sem recompra); comprar do próprio clube retorna "já pertence ao seu clube".
+- ✅ **R-12** 🟠 `pickRandom` e `handleStart` sorteavam/assumiam de TODOS os clubes e o
+  `selectedId` default (`CLUBS[0]`, premium) nunca era revalidado — um usuário `free` iniciava
+  carreira com clube premium pelo default ou pelo aleatório. *Corrigido*: helper `canUseClub(id)`
+  (`isPremium || isAvailableOnFree(id)`) aplicado no sorteio (pool permitido) e revalidado antes
+  do `selectClub`. Verificado: usuário free clica "Iniciar Jogo" e nada acontece (tela continua
+  no ClubSelect); premium segue normal.
+- ✅ **R-13** 🟠 A dispensa no fim de temporada era chaveada por `num` (`Set<number>`), mas `num`
+  colide quando uma contratação traz um jogador de outro clube com o mesmo número — dispensar um
+  marcava/rescindia os dois e o `find` por `num` reconstruía o jogador errado. *Corrigido*:
+  identidade por `playerKey` (name+num) em todo o overlay (Set, filtros, `find`, React keys,
+  toggle). Verificado: com dois jogadores num 1 (Rafael + ColideTest), dispensar ColideTest
+  removeu só ele (Rafael intacto), 1 única rescisão lançada ("Rescisão: ColideTest").
+- ✅ **R-14** 🟠 `applyAging` (estocástico, `Math.random`) era chamado 3× independentes — exibir
+  em Evolução, exibir em Contratos e aplicar ao elenco — então o envelhecimento mostrado nunca era
+  o salvo (nem a rescisão exibida batia com a lançada). *Corrigido*: o overlay calcula o
+  envelhecimento UMA vez (`useMemo` keyed em `[visible, season]`, num `Map` por `playerKey`
+  consistente com o R-13) e reaproveita o MESMO snapshot para exibir e aplicar. `ageCurve.ts`
+  intacto (regra do projeto; `npm run test:engine` segue passando). Verificado: força persistida
+  de 16 jogadores == força exibida na fase Contratos (100% de match).
+
 **A triar:**
 
 | ID | Sev. | Descrição | Onde |
 |----|------|-----------|------|
-| R-11 | 🔴 | TransferMarket com filtro "Todos os clubes" passa `selectedClubId` como `fromClubId` — permite recomprar o mesmo jogador infinitamente / duplicar o próprio | `TransferMarket.tsx` |
-| R-12 | 🟠 | Gating premium do ClubSelect contornável: `handleStart`/`pickRandom` ignoram `isAvailableOnFree` | `ClubSelect.tsx` |
-| R-13 | 🟠 | Dispensa no SeasonEndOverlay chaveada por `num` — colisão de números dispensa/duplica o jogador errado | `SeasonEndOverlay.tsx` |
-| R-14 | 🟠 | `applyAging` é estocástico e re-executado em cada fase do SeasonEndOverlay — o que o usuário vê nunca é o que é aplicado | `SeasonEndOverlay.tsx` |
 | R-15 | 🟡 | JOGAR não bloqueia escalação incompleta (slots null passam; só lesionado bloqueia) | `ManagerHub.tsx` |
 | R-16 | 🟠 | Guard de init do lineup só olha slots: 11 titulares dispensados → mount re-inicializa do JSON, ressuscitando dispensados e apagando contratados | `ManagerHub.tsx` |
 | R-17 | 🟢 | Botão "Continuar (debug)" do FiredModal é no-op (não limpa `isFired`) | `ManagerHub.tsx` |
@@ -166,4 +194,4 @@ triagem (pode haver falsos positivos). Severidade estimada pelo finder.
 
 ---
 
-*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Próxima sessão de QA: triagem dos R-11..R-19*
+*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Próxima sessão de QA: triagem dos R-15..R-19*
