@@ -29,6 +29,7 @@ import { coachLambdaBonus, calcPlayerReputation } from '@/engines/coachEngine'
 import { useCoachStore } from './useCoachStore'
 import { calcTicketRevenue, CLUB_STADIUM, STADIUMS } from '@/data/stadiums'
 import { useLineupStore }      from './useLineupStore'
+import { useTransferStore }    from './useTransferStore'
 import { useFinanceStore }     from './useFinanceStore'
 import { useStadiumStore }     from './useStadiumStore'
 import { useConfidenceStore }             from './useConfidenceStore'
@@ -329,6 +330,8 @@ export const useMatchStore = create<MatchStore>()(
     // Carreira nova (a virada de temporada não passa mais por aqui): limpa o
     // elenco persistido para o init() reconstruir do clube escolhido.
     useLineupStore.setState({ slots: [], bench: [], selected: null, dragSrc: null })
+    // Listagens de venda/empréstimo da carreira anterior não vazam (R-07)
+    useTransferStore.getState().clearAll()
 
     const clubCalendar = buildClubCalendar(clubId)
 
@@ -830,6 +833,9 @@ export const useMatchStore = create<MatchStore>()(
         slots: ls.slots.map(p => p ? { ...healInjury(p), fatigue: 0 } : null),
         bench: ls.bench.map(p => ({ ...healInjury(p), fatigue: 0 })),
       })
+      // Técnicos NPC: zera hiredRound/pressure (R-06 — senão contratado no
+      // fim da temporada fica imune a demissão na seguinte)
+      useCoachStore.getState().onSeasonTurnover()
       // Reconstrói calendário e reseta status das copas para nova temporada
       const newCalendar = s.myClubId ? buildClubCalendar(s.myClubId) : s.clubCalendar
       const newCupStatus: Record<string, 'active' | 'eliminated'> = {}
@@ -872,7 +878,11 @@ export const useMatchStore = create<MatchStore>()(
     const cupStatus: Record<string, 'active' | 'eliminated'> = {}
     clubCalendar.forEach(g => { cupStatus[g.competitionId] = 'active' })
 
-    set({ myClubId: clubId, contractGoal, initialBudget, clubCalendar, cupStatus, screen: 'hub' })
+    // Comprados para o clube anterior voltam ao mercado (R-09) — o elenco
+    // antigo reverte ao JSON, então mantê-los em acquiredPlayers só os
+    // sumiria do jogo pelo resto da carreira
+    set({ myClubId: clubId, contractGoal, initialBudget, clubCalendar, cupStatus,
+          acquiredPlayers: [], screen: 'hub' })
   },
 
   executeTransfer(player, fromClubId, type) {

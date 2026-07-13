@@ -498,7 +498,8 @@ Persiste estado do estádio entre sessões.
 ### 7.5 useTransferStore (`glfoot-transfers` v1)
 
 Controla quais jogadores estão listados para venda/empréstimo.  
-Chave: `${clubId}_${playerNum}`.
+Chave: `${clubId}_${playerNum}`. `selectClub` chama `clearAll()` para que listagens de
+uma carreira anterior não vazem para a nova.
 
 ### 7.6 useLineupStore (`glfoot-lineup` v2)
 
@@ -515,6 +516,13 @@ ClubSelect — o elenco envelhecido segue direto para a temporada seguinte).
 Técnicos NPC, mercado livre, notícias de movimentação (últimas 30) e propostas
 pendentes para o jogador demitido. `processRound` é chamado pelo `nextRound`;
 carreiras antigas ganham técnicos via backfill no mount do ManagerHub.
+
+Na virada de temporada, `closeSeasonEnd` chama `onSeasonTurnover()` para zerar
+`hiredRound`/`pressure` de todos os técnicos — sem isso, quem foi contratado no fim
+da temporada ficaria protegido pela janela de graça (`GRACE_ROUNDS`) a temporada
+seguinte inteira. Os ids de técnicos cunhados em runtime derivam de `max(ids)+1`
+sobre a lista existente (não de um contador módulo-level, que reiniciaria no reload
+e colidiria com os coaches persistidos).
 
 ### 7.8 useAuthStore (`glfoot-auth` v1)
 

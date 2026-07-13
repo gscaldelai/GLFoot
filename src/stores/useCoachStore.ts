@@ -27,6 +27,8 @@ interface CoachStore {
   acceptOffer:    (clubId: string, round: number) => void
   clearOffers:    () => void
 
+  onSeasonTurnover: () => void
+
   reset: () => void
 }
 
@@ -68,6 +70,14 @@ export const useCoachStore = create<CoachStore>()(
       },
 
       clearOffers: () => set({ playerOffers: [] }),
+
+      // Virada de temporada: hiredRound é rodada absoluta DENTRO da temporada —
+      // sem reset, técnico contratado no fim da temporada N mantém
+      // round - hiredRound < GRACE_ROUNDS a temporada N+1 inteira (imune a
+      // demissão). A pressão acumulada também não atravessa temporadas.
+      onSeasonTurnover() {
+        set({ coaches: get().coaches.map(c => ({ ...c, hiredRound: 0, pressure: 0 })) })
+      },
 
       reset: () => set({ coaches: [], news: [], playerOffers: [] }),
     }),

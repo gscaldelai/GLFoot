@@ -4,7 +4,7 @@
 **Testador:** GustãoFC (usuário real) + revisão adversarial automatizada (12/07)  
 **Sessão de teste:** 3+ partidas simuladas (SPFC × Corinthians, outros)  
 **Total de itens:** 14 originais (todos resolvidos) + backlog R-xx da revisão de 12/07  
-**Status:** ✅ 18 resolvidos · 🔍 15 achados a triar (seção "Revisão adversarial 12/07")
+**Status:** ✅ 22 resolvidos · 🔍 11 achados a triar (seção "Revisão adversarial 12/07")
 
 ---
 
@@ -120,14 +120,27 @@ triagem (pode haver falsos positivos). Severidade estimada pelo finder.
   adiando também o `JSON.stringify`) e flush em `beforeunload`/`pagehide`. Verificado: escrita
   defasada ≤1s e estado íntegro após F5 imediato.
 
+**Triados e resolvidos em 13/07 (2º lote)** (todos os 4 confirmados e verificados no browser):
+- ✅ **R-06** 🟠 A virada de temporada não resetava `hiredRound`/`pressure` dos técnicos NPC.
+  Como `hiredRound` é rodada absoluta dentro da temporada, um técnico contratado na rodada ~36
+  mantinha `round - hiredRound < GRACE_ROUNDS` a temporada seguinte inteira (imune a demissão).
+  *Corrigido*: `useCoachStore.onSeasonTurnover()` zera `hiredRound`/`pressure`, chamado no
+  `closeSeasonEnd`. Verificado: técnico com `hiredRound: 36, pressure: 3` → `0/0` na virada 2→3.
+- ✅ **R-07** 🟠 `useTransferStore` (listagens de venda/empréstimo) nunca era limpo em `selectClub`,
+  então listagens de uma carreira anterior vazavam para a nova. *Corrigido*: `clearAll()` no
+  `selectClub`. Verificado: 7 listagens → 0 ao criar carreira nova.
+- ✅ **R-08** 🟡 `nextCoachId` era um contador módulo-level que reinicia em 1 no reload, enquanto
+  os coaches persistem com ids altos — técnicos cunhados depois colidiam (`npc-1` já existia).
+  *Corrigido*: `nextIdNum(coaches)` deriva o próximo id de `max(ids)+1`. Verificado: com ids
+  existentes `npc-50/51`, os cunhados começaram em `npc-52` (sem colisão com `npc-1`).
+- ✅ **R-09** 🟡 `switchClub` (aceitar proposta pós-demissão) não limpava `acquiredPlayers`; como
+  o elenco reverte ao JSON do novo clube, os comprados sumiam do jogo pelo resto da carreira.
+  *Corrigido*: `acquiredPlayers: []` no `switchClub`. Verificado: 2 comprados → 0 ao assumir o Flamengo.
+
 **A triar:**
 
 | ID | Sev. | Descrição | Onde |
 |----|------|-----------|------|
-| R-06 | 🟠 | Virada de temporada não reseta `hiredRound`/`pressure` dos técnicos NPC — contratado no fim da temporada N fica imune a demissão em N+1 | `useCoachStore.ts` |
-| R-07 | 🟠 | `useTransferStore` nunca é resetado em `selectClub` — listagens da carreira anterior vazam para a nova | `useMatchStore.ts` |
-| R-08 | 🟡 | `nextCoachId` é módulo-level e reinicia no reload enquanto coaches persistem — IDs de novos técnicos colidem com existentes | `coachEngine.ts` |
-| R-09 | 🟡 | `switchClub` não limpa `acquiredPlayers` — comprados para o clube anterior somem do mercado pelo resto da carreira | `useMatchStore.ts` |
 | R-10 | 🟠 | Stores de jogo são globais ao browser, não por usuário — trocar de conta entrega/destrói a carreira de outro usuário | `useAuthStore.ts` |
 | R-11 | 🔴 | TransferMarket com filtro "Todos os clubes" passa `selectedClubId` como `fromClubId` — permite recomprar o mesmo jogador infinitamente / duplicar o próprio | `TransferMarket.tsx` |
 | R-12 | 🟠 | Gating premium do ClubSelect contornável: `handleStart`/`pickRandom` ignoram `isAvailableOnFree` | `ClubSelect.tsx` |
@@ -141,4 +154,4 @@ triagem (pode haver falsos positivos). Severidade estimada pelo finder.
 
 ---
 
-*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Próxima sessão de QA: triagem dos R-06..R-19*
+*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Próxima sessão de QA: triagem dos R-10..R-19*

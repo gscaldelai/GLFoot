@@ -60,10 +60,20 @@ const LAST = ['Ferreira', 'Sampaio', 'Luxemburgo', 'de Oliveira', 'Bachi',
   'Hellmann', 'Doriva', 'Ventura', 'Ceni', 'Mancini', 'Moreira', 'Fuchs',
   'Barroca', 'Pereira', 'dos Anjos', 'Carille', 'Autuori', 'Baptista', 'Lopes']
 
-let nextCoachId = 1
-function makeCoach(reputation: number, clubId: string | null, hiredRound = 0): Coach {
+// O id é derivado da lista existente — um contador módulo-level zera no
+// reload enquanto os coaches persistem, e os ids novos colidiriam (R-08)
+function nextIdNum(coaches: Coach[]): number {
+  let max = 0
+  for (const c of coaches) {
+    const n = Number(c.id.slice(4)) // 'npc-N'
+    if (Number.isFinite(n) && n > max) max = n
+  }
+  return max + 1
+}
+
+function makeCoach(reputation: number, clubId: string | null, idNum: number, hiredRound = 0): Coach {
   return {
-    id:         `npc-${nextCoachId++}`,
+    id:         `npc-${idNum}`,
     name:       `${FIRST[Math.floor(Math.random() * FIRST.length)]} ${LAST[Math.floor(Math.random() * LAST.length)]}`,
     age:        38 + Math.floor(Math.random() * 25),
     reputation: Math.max(1, Math.min(5, reputation)),
@@ -85,11 +95,11 @@ export function generateInitialCoaches(playerClubId: string): Coach[] {
     if (entry.id === playerClubId) continue
     const minRep = MIN_REPUTATION_BY_TIER[entry.tier]
     const rep    = minRep + (Math.random() < 0.35 ? 1 : 0)
-    coaches.push(makeCoach(rep, entry.id))
+    coaches.push(makeCoach(rep, entry.id, coaches.length + 1))
   }
   // Mercado livre inicial: mix de reputações
   const freeReps = [1, 1, 2, 2, 3, 4]
-  for (const rep of freeReps) coaches.push(makeCoach(rep, null))
+  for (const rep of freeReps) coaches.push(makeCoach(rep, null, coaches.length + 1))
   return coaches
 }
 
@@ -163,7 +173,7 @@ export function processCoachRound(
       hire = eligible.reduce((best, c) => (c.reputation > best.reputation ? c : best))
     } else {
       // Mercado sem ninguém à altura: diretoria aposta em um nome novo
-      hire = makeCoach(minRep, null)
+      hire = makeCoach(minRep, null, nextIdNum(updated))
       updated = [...updated, hire]
     }
     hire.clubId     = entry.id
