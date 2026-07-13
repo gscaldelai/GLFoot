@@ -37,8 +37,11 @@ export function getClubStrength(id: string): ClubStrengthEntry | undefined {
   return CLUB_STRENGTH.find(e => e.id === id)
 }
 
+// Free: clubes médios e pequenos (tier B e C). Premium desbloqueia os grandes
+// (tier S e A: Flamengo, Palmeiras, São Paulo, Corinthians, Grêmio, etc.).
+// Todos os 20 clubes têm elenco completo (11+5), então qualquer tier é jogável.
 export function isAvailableOnFree(id: string): boolean {
   const entry = getClubStrength(id)
   if (!entry) return true
-  return entry.forcaMedia <= 50
+  return entry.tier === 'B' || entry.tier === 'C'
 }

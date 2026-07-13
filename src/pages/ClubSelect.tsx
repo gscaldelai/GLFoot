@@ -39,11 +39,14 @@ export default function ClubSelect() {
   // Técnico
   const [coachName, setCoachName]     = useState(user?.nickname ?? '')
   const [nationality, setNationality] = useState('Brasileiro')
-  const [selectedId, setSelectedId]   = useState<string>(CLUBS[0]?.id ?? '')
+  // Sem clube pré-selecionado: o técnico escolhe o time; a proposta de contrato
+  // só aparece depois da escolha (nada de convite default do CLUBS[0]).
+  const [selectedId, setSelectedId]   = useState<string>('')
   const [random, setRandom]           = useState(false)
 
   const { d1, d2, d3 } = byDivision(CLUBS)
   const selected = CLUBS.find(c => c.id === selectedId)
+  const canStart = !!coachName.trim() && (random || !!selected)
 
   function toggleLeague(id: string) {
     setLeagues(prev =>
@@ -155,8 +158,10 @@ export default function ClubSelect() {
               </div>
             </Panel>
 
-            {/* Proposta de Contrato — fica no rodapé da coluna esquerda */}
-            {selected && <ContractPanel club={selected} coachName={coachName} />}
+            {/* Proposta de Contrato — só aparece após escolher o clube */}
+            {selected
+              ? <ContractPanel club={selected} coachName={coachName} />
+              : <ContractPlaceholder />}
 
           </div>
 
@@ -220,15 +225,32 @@ export default function ClubSelect() {
               </div>
             </Panel>
 
-            {/* Botão iniciar */}
-            <div className="flex justify-end pt-1">
-              <BtnPrimary onClick={handleStart} disabled={!coachName.trim()}>
+            {/* Botão iniciar — exige nome do técnico E um clube (ou sorteio) */}
+            <div className="flex flex-col items-end gap-1 pt-1">
+              {coachName.trim() && !random && !selected && (
+                <span className="text-[11px] text-[#5a7080]">Escolha um clube para começar.</span>
+              )}
+              <BtnPrimary onClick={handleStart} disabled={!canStart}>
                 Iniciar Jogo →→
               </BtnPrimary>
             </div>
 
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Placeholder enquanto nenhum clube foi escolhido ───────────────────────────
+function ContractPlaceholder() {
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-surface/20 px-4 py-8 text-center">
+      <div className="text-[30px] opacity-20 mb-2 select-none">📄</div>
+      <div className="text-[12px] text-[#5a7080] leading-relaxed">
+        Escolha um clube para ver a proposta de contrato
+        <br />
+        <span className="text-[#3a5060]">(meta, orçamento e confiança).</span>
       </div>
     </div>
   )

@@ -672,6 +672,11 @@ Tela de nova carreira em duas colunas:
 - **Esquerda:** Ligas nacionais (checkbox) · Competições regionais (tags) · **Proposta de Contrato** (mostra tier, meta, orçamento, confiança inicial)
 - **Direita:** Seleção nacional · Escolher clube · Dados do técnico · Botão Iniciar
 
+**Nenhum clube vem pré-selecionado** (`selectedId` inicia vazio): a coluna esquerda
+mostra um placeholder ("Escolha um clube…") e o botão Iniciar fica desabilitado até o
+técnico escolher um clube (ou marcar o sorteio). Só então a Proposta de Contrato aparece,
+para o clube escolhido. O dropdown filtra pelo plano (Free = tier B/C; Premium = todos).
+
 ### ManagerHub
 Hub principal com sidebar de 48px e área de conteúdo. Atalhos: F4 Jogos · F5 Tabelas · F6 Estádios · F8 Mercado.
 
@@ -872,8 +877,8 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 |---|---|---|
 | Velocidade 1× | ✅ | ✅ |
 | Velocidade 1.5× e 2× | 🔒 | ✅ |
-| Clubes com força ≤50 | ✅ | ✅ |
-| Clubes com força >50 | 🔒 | ✅ |
+| Clubes tier B/C (médios e pequenos: Santos, Vasco, Fortaleza, Goiás…) | ✅ | ✅ |
+| Clubes tier S/A (grandes: Flamengo, Palmeiras, SPFC, Corinthians…) | 🔒 | ✅ |
 | Central de Empregos | 🔒 | ✅ |
 | Seleção Nacional | 🔒 | ✅ (TODO) |
 | Ver pênaltis | ✅ | ✅ |
@@ -884,7 +889,8 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 ## 17. Limitações Conhecidas
 
 ### Dados
-- Apenas **2 clubes** têm elenco JSON completo (SPFC e Palmeiras). Os outros 18 são bots sem jogadores.
+- Os **20 clubes** têm elenco jogável (11 titulares + 5 no banco): SPFC e Palmeiras são
+  feitos à mão; os outros 18 foram gerados por `scripts/generate-bot-squads.js`.
 - Logos reais dos clubes ausentes — apenas SVG gerado pelas cores.
 - Calendário hardcoded para o SPFC (`buildSPFCCalendar()`). Outros clubes usam o mesmo calendário.
 - Adversários nos jogos ainda são `???` — o calendário não define oponentes.
