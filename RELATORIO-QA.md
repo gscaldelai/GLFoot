@@ -1,10 +1,10 @@
 # GLfoot — Relatório de QA
 **Versão testada:** Modo Carreira v0.x  
-**Data:** 2026-06-12 · atualizado 2026-07-06  
-**Testador:** GustãoFC (usuário real)  
+**Data:** 2026-06-12 · atualizado 2026-07-12  
+**Testador:** GustãoFC (usuário real) + revisão adversarial automatizada (12/07)  
 **Sessão de teste:** 3+ partidas simuladas (SPFC × Corinthians, outros)  
-**Total de itens:** 14  
-**Status:** ✅ 14 resolvidos · 0 abertos — relatório zerado
+**Total de itens:** 14 originais (todos resolvidos) + backlog R-xx da revisão de 12/07  
+**Status:** ✅ 14 resolvidos · 🔍 19 achados a triar (seção "Revisão adversarial 12/07")
 
 ---
 
@@ -88,4 +88,44 @@
 
 ---
 
-*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Próxima sessão de QA: a definir*
+## Revisão adversarial 12/07 — backlog a triar
+
+Achados de uma revisão automatizada em 4 dimensões (fluxo de partida, persistência,
+integração de UI, virada de temporada). A etapa de verificação adversarial foi cortada
+pelo limite de sessão, então **estes itens NÃO foram confirmados** — cada um precisa de
+triagem (pode haver falsos positivos). Severidade estimada pelo finder.
+
+**Já resolvidos na própria sessão de 12/07:**
+- ✅ **R-00** 🔴 F5 com a tela de vitória aberta duplicava o resultado (classificação,
+  histórico, bilheteria, confiança ×2). *Confirmado e corrigido*: o "commit" do resultado
+  saiu do `tick()` (90') e foi para o `nextRound()`, com guard de idempotência.
+- ✅ **R-01** 🟠 Carreira encerrada (temporada 15) deixava `round: 39` persistido — todo
+  F5 reabria o SeasonEndOverlay sobre o ClubSelect e duplicava `completedSeasons`.
+  *Corrigido*: `closeSeasonEnd` reseta `round: 1` no fim da carreira.
+
+**A triar:**
+
+| ID | Sev. | Descrição | Onde |
+|----|------|-----------|------|
+| R-02 | 🟠 | `handleJogar` decide mando de campo por paridade da rodada, contradizendo o fixture exibido no NextMatchCard/CalendarView | `ManagerHub.tsx` |
+| R-03 | 🟠 | `doSub` descarta o substituído e mantém o reserva duplicado (em campo e no banco), inconsistente com os outros fluxos de substituição | `useMatchStore.ts` |
+| R-04 | 🟡 | `toggleRun` não valida `injurySub`/`halftimeVisible` — teclado religa o jogo por trás do modal obrigatório | `useMatchStore.ts` |
+| R-05 | 🟡 | Persist do glfoot-career serializa a carreira inteira a cada `tick()` (~10ms) — possível custo de performance na partida | `useMatchStore.ts` |
+| R-06 | 🟠 | Virada de temporada não reseta `hiredRound`/`pressure` dos técnicos NPC — contratado no fim da temporada N fica imune a demissão em N+1 | `useCoachStore.ts` |
+| R-07 | 🟠 | `useTransferStore` nunca é resetado em `selectClub` — listagens da carreira anterior vazam para a nova | `useMatchStore.ts` |
+| R-08 | 🟡 | `nextCoachId` é módulo-level e reinicia no reload enquanto coaches persistem — IDs de novos técnicos colidem com existentes | `coachEngine.ts` |
+| R-09 | 🟡 | `switchClub` não limpa `acquiredPlayers` — comprados para o clube anterior somem do mercado pelo resto da carreira | `useMatchStore.ts` |
+| R-10 | 🟠 | Stores de jogo são globais ao browser, não por usuário — trocar de conta entrega/destrói a carreira de outro usuário | `useAuthStore.ts` |
+| R-11 | 🔴 | TransferMarket com filtro "Todos os clubes" passa `selectedClubId` como `fromClubId` — permite recomprar o mesmo jogador infinitamente / duplicar o próprio | `TransferMarket.tsx` |
+| R-12 | 🟠 | Gating premium do ClubSelect contornável: `handleStart`/`pickRandom` ignoram `isAvailableOnFree` | `ClubSelect.tsx` |
+| R-13 | 🟠 | Dispensa no SeasonEndOverlay chaveada por `num` — colisão de números dispensa/duplica o jogador errado | `SeasonEndOverlay.tsx` |
+| R-14 | 🟠 | `applyAging` é estocástico e re-executado em cada fase do SeasonEndOverlay — o que o usuário vê nunca é o que é aplicado | `SeasonEndOverlay.tsx` |
+| R-15 | 🟡 | JOGAR não bloqueia escalação incompleta (slots null passam; só lesionado bloqueia) | `ManagerHub.tsx` |
+| R-16 | 🟠 | Guard de init do lineup só olha slots: 11 titulares dispensados → mount re-inicializa do JSON, ressuscitando dispensados e apagando contratados | `ManagerHub.tsx` |
+| R-17 | 🟢 | Botão "Continuar (debug)" do FiredModal é no-op (não limpa `isFired`) | `ManagerHub.tsx` |
+| R-18 | 🟡 | `processCoachRound` contrata técnico NPC para o clube DO JOGADOR na 1ª rodada, violando invariante documentado | `coachEngine.ts` |
+| R-19 | 🟢 | Notícias de técnicos da temporada anterior vazam para a nova (news não limpa; UI mostra só "R{round}") | `CoachesView.tsx` |
+
+---
+
+*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Próxima sessão de QA: triagem dos R-02..R-19*

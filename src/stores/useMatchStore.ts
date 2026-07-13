@@ -378,84 +378,11 @@ export const useMatchStore = create<MatchStore>()(
     second++
     if (second >= 60) { second = 0; minute++ }
     if (minute >= 90) {
-      // Fim de jogo
-      const standings2 = applyResult(s.standings, s.homeClub!.id, s.awayClub!.id, gh, ga)
-      const histRow: HistoryRow = {
-        round: s.round, homeId: s.homeClub!.id, awayId: s.awayClub!.id,
-        homeShort: s.homeClub!.short, awayShort: s.awayClub!.short, gh, ga,
-      }
-
-      // ── Confiança: dispara evento de resultado ───────────
-      const isMyHome = s.homeClub?.id === s.myClubId
-      const isMyAway = s.awayClub?.id === s.myClubId
-      if (isMyHome || isMyAway) {
-        const myGoals  = isMyHome ? gh : ga
-        const oppGoals = isMyHome ? ga : gh
-        const oppClubId = isMyHome ? s.awayClub!.id : s.homeClub!.id
-        const oppEntry  = CLUB_STRENGTH.find(e => e.id === oppClubId)
-        const myEntry   = CLUB_STRENGTH.find(e => e.id === s.myClubId!)
-        const oppForce  = oppEntry?.forcaMedia ?? 60
-        const myForce   = myEntry?.forcaMedia  ?? 60
-        const isClassico = classicoPair(s.homeClub!.id, s.awayClub!.id)
-
-        useConfidenceStore.getState().onMatchResult({
-          round:      s.round,
-          season:     s.season,
-          isHomeGame: isMyHome,
-          myGoals,
-          oppGoals,
-          isClassico,
-          oppForce,
-          myForce,
-        })
-      }
-
-      // ── Receita de bilheteria (somente jogo em casa) ─────
-      if (s.homeClub?.id === s.myClubId) {
-        const stadiumId  = CLUB_STADIUM[s.myClubId!]
-        const stadium    = stadiumId ? STADIUMS[stadiumId] : null
-        if (stadium) {
-          const stadiumStore = useStadiumStore.getState()
-          const capacity     = stadiumStore.getCapacity(stadiumId)
-          const prices       = stadiumStore.getTierPrices(stadiumId)
-          const importance   = detectImportance(s.round, s.homeClub!.id, s.awayClub!.id)
-          const rev          = calcTicketRevenue(stadiumId, importance, capacity, prices, s.round)
-          useFinanceStore.getState().addIncome(
-            rev.revenue,
-            'bilheteria',
-            `Bilheteria R${s.round} — ${s.homeClub!.short} ${gh}×${ga} ${s.awayClub!.short}`,
-            s.round,
-            s.season,
-          )
-        }
-      }
-
-      // ── Write-back de lesões para o elenco do jogador (G-02) ─────────
-      // Squads da partida são cópias — a lesão precisa voltar ao lineup store
-      const mySquadWB = isMyHome ? s.homeSquad : s.awaySquad
-      const myBenchWB = isMyHome ? s.homeBench : s.awayBench
-      const injuredNow = (isMyHome || isMyAway)
-        ? [...mySquadWB, ...myBenchWB].filter(p => p.injured && (p.injuryRoundsLeft ?? 0) > 0)
-        : []
-      if (injuredNow.length) {
-        const ls = useLineupStore.getState()
-        const hit = (x: Player) => injuredNow.find(i => i.name === x.name && i.num === x.num)
-        const mark = (p: Player) => {
-          const inj = hit(p)
-          if (!inj) return p
-          if (p.injured) return p   // já estava lesionado antes da partida — mantém contagem
-          // +1 compensa o decremento do nextRound desta mesma rodada:
-          // "fora por N rodadas" = perde exatamente as N próximas partidas
-          return { ...p, injured: true, injuryRoundsLeft: (inj.injuryRoundsLeft ?? 1) + 1, injuryLabel: inj.injuryLabel }
-        }
-        useLineupStore.setState({
-          slots: ls.slots.map(p => p ? mark(p) : null),
-          bench: ls.bench.map(mark),
-        })
-      }
-
+      // Fim de jogo — só estado TRANSITÓRIO. O "commit" do resultado
+      // (classificação, histórico, bilheteria, confiança, lesões) acontece
+      // no nextRound(): se o usuário der F5 na tela de vitória, a rodada é
+      // re-disputada sem duplicar nada no estado persistido.
       set({ minute: 90, second: 0, running: false, ended: true,
-            standings: standings2, matchHistory: [...s.matchHistory, histRow],
             victoryVisible: true, injurySub: null })
       return
     }
@@ -648,7 +575,82 @@ export const useMatchStore = create<MatchStore>()(
 
   nextRound() {
     const s = get()
-    let standings = s.standings
+    // Idempotência: só processa com uma partida encerrada pendente
+    // (bloqueia clique duplo no VictoryOverlay e chamadas órfãs pós-F5)
+    if (!s.ended || !s.homeClub || !s.awayClub) return
+    const { gh, ga } = s
+
+    // ── Commit do resultado da minha partida (movido do tick aos 90') ─────
+    let standings = applyResult(s.standings, s.homeClub.id, s.awayClub.id, gh, ga)
+    const histRow: HistoryRow = {
+      round: s.round, homeId: s.homeClub.id, awayId: s.awayClub.id,
+      homeShort: s.homeClub.short, awayShort: s.awayClub.short, gh, ga,
+    }
+
+    // ── Confiança: dispara evento de resultado ───────────
+    const isMyHome = s.homeClub.id === s.myClubId
+    const isMyAway = s.awayClub.id === s.myClubId
+    if (isMyHome || isMyAway) {
+      const myGoals  = isMyHome ? gh : ga
+      const oppGoals = isMyHome ? ga : gh
+      const oppClubId = isMyHome ? s.awayClub.id : s.homeClub.id
+      const oppEntry  = CLUB_STRENGTH.find(e => e.id === oppClubId)
+      const myEntry   = CLUB_STRENGTH.find(e => e.id === s.myClubId!)
+      useConfidenceStore.getState().onMatchResult({
+        round:      s.round,
+        season:     s.season,
+        isHomeGame: isMyHome,
+        myGoals,
+        oppGoals,
+        isClassico: classicoPair(s.homeClub.id, s.awayClub.id),
+        oppForce:   oppEntry?.forcaMedia ?? 60,
+        myForce:    myEntry?.forcaMedia  ?? 60,
+      })
+    }
+
+    // ── Receita de bilheteria (somente jogo em casa) ─────
+    if (s.homeClub.id === s.myClubId) {
+      const stadiumId  = CLUB_STADIUM[s.myClubId!]
+      const stadium    = stadiumId ? STADIUMS[stadiumId] : null
+      if (stadium) {
+        const stadiumStore = useStadiumStore.getState()
+        const capacity     = stadiumStore.getCapacity(stadiumId)
+        const prices       = stadiumStore.getTierPrices(stadiumId)
+        const importance   = detectImportance(s.round, s.homeClub.id, s.awayClub.id)
+        const rev          = calcTicketRevenue(stadiumId, importance, capacity, prices, s.round)
+        useFinanceStore.getState().addIncome(
+          rev.revenue,
+          'bilheteria',
+          `Bilheteria R${s.round} — ${s.homeClub.short} ${gh}×${ga} ${s.awayClub.short}`,
+          s.round,
+          s.season,
+        )
+      }
+    }
+
+    // ── Write-back de lesões para o elenco do jogador (G-02) ─────────
+    // Squads da partida são cópias — a lesão precisa voltar ao lineup store
+    const mySquadWB = isMyHome ? s.homeSquad : s.awaySquad
+    const myBenchWB = isMyHome ? s.homeBench : s.awayBench
+    const injuredNow = (isMyHome || isMyAway)
+      ? [...mySquadWB, ...myBenchWB].filter(p => p.injured && (p.injuryRoundsLeft ?? 0) > 0)
+      : []
+    if (injuredNow.length) {
+      const ls0 = useLineupStore.getState()
+      const hit = (x: Player) => injuredNow.find(i => i.name === x.name && i.num === x.num)
+      const mark = (p: Player) => {
+        const inj = hit(p)
+        if (!inj) return p
+        if (p.injured) return p   // já estava lesionado antes da partida — mantém contagem
+        // +1 compensa o decremento do nextRound desta mesma rodada:
+        // "fora por N rodadas" = perde exatamente as N próximas partidas
+        return { ...p, injured: true, injuryRoundsLeft: (inj.injuryRoundsLeft ?? 1) + 1, injuryLabel: inj.injuryLabel }
+      }
+      useLineupStore.setState({
+        slots: ls0.slots.map(p => p ? mark(p) : null),
+        bench: ls0.bench.map(mark),
+      })
+    }
 
     // Simula os jogos dos bots usando fixtures e força real dos clubes
     const myId = s.myClubId
@@ -741,10 +743,12 @@ export const useMatchStore = create<MatchStore>()(
     // ──────────────────────────────────────────────────────────────────────
 
     const nextRound = s.round + 1
+    const committed = { standings, matchHistory: [...s.matchHistory, histRow],
+                        round: nextRound, victoryVisible: false, ended: false, cupStatus }
     if (nextRound > 38) {
-      set({ standings, round: nextRound, victoryVisible: false, seasonEndVisible: true, cupStatus })
+      set({ ...committed, seasonEndVisible: true })
     } else {
-      set({ standings, round: nextRound, victoryVisible: false, screen: 'hub', cupStatus })
+      set({ ...committed, screen: 'hub' })
     }
   },
 
@@ -780,7 +784,9 @@ export const useMatchStore = create<MatchStore>()(
     }
 
     if (nextSeason > 15) {
-      set({ seasonEndVisible: false, screen: 'select' })
+      // round volta a 1: com 39 persistido, todo F5 no ClubSelect reabriria
+      // o SeasonEndOverlay (onRehydrateStorage) e duplicaria completedSeasons
+      set({ seasonEndVisible: false, screen: 'select', round: 1 })
     } else {
       const ls = useLineupStore.getState()
       useLineupStore.setState({
