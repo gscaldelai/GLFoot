@@ -1,10 +1,10 @@
 # GLfoot — Relatório de QA
 **Versão testada:** Modo Carreira v0.x  
-**Data:** 2026-06-12 · atualizado 2026-07-12  
+**Data:** 2026-06-12 · atualizado 2026-07-13  
 **Testador:** GustãoFC (usuário real) + revisão adversarial automatizada (12/07)  
 **Sessão de teste:** 3+ partidas simuladas (SPFC × Corinthians, outros)  
 **Total de itens:** 14 originais (todos resolvidos) + backlog R-xx da revisão de 12/07  
-**Status:** ✅ 14 resolvidos · 🔍 19 achados a triar (seção "Revisão adversarial 12/07")
+**Status:** ✅ 18 resolvidos · 🔍 15 achados a triar (seção "Revisão adversarial 12/07")
 
 ---
 
@@ -103,14 +103,27 @@ triagem (pode haver falsos positivos). Severidade estimada pelo finder.
   F5 reabria o SeasonEndOverlay sobre o ClubSelect e duplicava `completedSeasons`.
   *Corrigido*: `closeSeasonEnd` reseta `round: 1` no fim da carreira.
 
+**Triados e resolvidos em 13/07** (todos os 4 confirmados como bugs reais e verificados no browser):
+- ✅ **R-02** 🟠 `handleJogar` decidia mando de campo por `round % 2`, contradizendo o fixture
+  exibido no NextMatchCard/calendário. *Corrigido*: mando vem de `getNextFixture` (paridade só
+  como fallback de carreiras sem fixtures). Verificado: rodada 7 ímpar com fixture `cor × spfc`
+  iniciou a partida com o SPFC visitante. ⚠ Obs.: `LineupEditor.tsx` tem um `handleJogar` legado
+  com o mesmo padrão, mas é código morto (só o `VerticalField` é importado) — candidato a remoção.
+- ✅ **R-03** 🟠 `doSub` descartava quem saía e mantinha o reserva duplicado (em campo e no banco).
+  *Corrigido*: troca simétrica como no `resolveInjurySub` — quem sai ocupa a vaga do banco com
+  `usedInSub: true`. Verificado: 11 em campo / 5 no banco, sem duplicata, `subCount` correto.
+- ✅ **R-04** 🟡 `toggleRun` só checava `ended` — Space/Enter no botão de play ainda focado
+  religava o jogo por trás do modal obrigatório de lesão/intervalo. *Corrigido*: guard para
+  `injurySub` e `halftimeVisible`. Verificado nos três cenários.
+- ✅ **R-05** 🟡 Persist serializava + gravava a carreira inteira no localStorage a cada `set()`
+  (todo tick durante a partida). *Corrigido*: storage custom com throttle (máx. 1 escrita/s,
+  adiando também o `JSON.stringify`) e flush em `beforeunload`/`pagehide`. Verificado: escrita
+  defasada ≤1s e estado íntegro após F5 imediato.
+
 **A triar:**
 
 | ID | Sev. | Descrição | Onde |
 |----|------|-----------|------|
-| R-02 | 🟠 | `handleJogar` decide mando de campo por paridade da rodada, contradizendo o fixture exibido no NextMatchCard/CalendarView | `ManagerHub.tsx` |
-| R-03 | 🟠 | `doSub` descarta o substituído e mantém o reserva duplicado (em campo e no banco), inconsistente com os outros fluxos de substituição | `useMatchStore.ts` |
-| R-04 | 🟡 | `toggleRun` não valida `injurySub`/`halftimeVisible` — teclado religa o jogo por trás do modal obrigatório | `useMatchStore.ts` |
-| R-05 | 🟡 | Persist do glfoot-career serializa a carreira inteira a cada `tick()` (~10ms) — possível custo de performance na partida | `useMatchStore.ts` |
 | R-06 | 🟠 | Virada de temporada não reseta `hiredRound`/`pressure` dos técnicos NPC — contratado no fim da temporada N fica imune a demissão em N+1 | `useCoachStore.ts` |
 | R-07 | 🟠 | `useTransferStore` nunca é resetado em `selectClub` — listagens da carreira anterior vazam para a nova | `useMatchStore.ts` |
 | R-08 | 🟡 | `nextCoachId` é módulo-level e reinicia no reload enquanto coaches persistem — IDs de novos técnicos colidem com existentes | `coachEngine.ts` |
@@ -128,4 +141,4 @@ triagem (pode haver falsos positivos). Severidade estimada pelo finder.
 
 ---
 
-*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Próxima sessão de QA: triagem dos R-02..R-19*
+*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Próxima sessão de QA: triagem dos R-06..R-19*

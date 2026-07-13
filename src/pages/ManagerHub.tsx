@@ -643,7 +643,10 @@ function EscalacaoPanel({ myClub, opp }: { myClub: Club; opp: Club }) {
     const lineup   = useLineupStore.getState().getLineupForMatch()
     const benchAll = useLineupStore.getState().bench
     const round    = useMatchStore.getState().round
-    const isHome   = round % 2 === 1
+    // Mando de campo vem do fixture real — o mesmo exibido no NextMatchCard
+    // e no calendário; paridade só como fallback de carreiras sem fixtures
+    const fix      = getNextFixture(useMatchStore.getState().fixtures, myClub.id, round)
+    const isHome   = fix ? fix.homeId === myClub.id : round % 2 === 1
     const oppTired = {
       ...opp,
       squad: withBotFatigue(opp.squad, round),

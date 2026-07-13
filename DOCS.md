@@ -446,7 +446,9 @@ Estado central da carreira e da partida ao vivo.
 da partida ao vivo é transitório). No `onRehydrateStorage`, saves com `round > 38`
 reabrem o `seasonEndVisible` para não travar o fechamento da temporada; o callback
 **muta o `state` diretamente** (referenciar `useMatchStore` ali lança TDZ e aborta
-a hidratação).
+a hidratação). A gravação usa um **storage com throttle** (`throttledStorage`, máx.
+1 escrita/s — o persist dispara em todo `set()`, inclusive a cada tick da partida)
+com flush em `beforeunload`/`pagehide`, então F5/fechar aba não perde estado.
 
 ### 7.2 useFinanceStore (`glfoot-finance` v1)
 

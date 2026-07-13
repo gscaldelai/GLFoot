@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, type PersistStorage } from 'zustand/middleware'
 import type { Club, Player, MatchEvent } from '@/engines/types'
 import { CLUBS, CLUBS_MAP } from '@/data/clubs'
 
@@ -236,6 +236,39 @@ function genSideEvents(): SideEvent[] {
   return mins.map(m => pool[Math.floor(Math.random() * pool.length)](m))
 }
 
+// O persist serializa e grava a carreira INTEIRA a cada set() — durante a
+// partida isso significa JSON.stringify + localStorage.setItem em todo tick.
+// Este storage adia a gravação (no máx. 1 escrita/s) e faz flush no unload,
+// então F5/fechar aba logo após o commit da rodada não perde nada.
+function throttledStorage<T>(ms: number): PersistStorage<T> {
+  let pending: { name: string; value: unknown } | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const flush = () => {
+    if (timer) { clearTimeout(timer); timer = null }
+    if (!pending) return
+    localStorage.setItem(pending.name, JSON.stringify(pending.value))
+    pending = null
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', flush)
+    window.addEventListener('pagehide', flush)
+  }
+  return {
+    getItem: (name) => {
+      const str = localStorage.getItem(name)
+      return str ? JSON.parse(str) : null
+    },
+    setItem: (name, value) => {
+      pending = { name, value }
+      if (!timer) timer = setTimeout(flush, ms)
+    },
+    removeItem: (name) => {
+      pending = null
+      localStorage.removeItem(name)
+    },
+  }
+}
+
 export const useMatchStore = create<MatchStore>()(
   persist(
   (set, get) => ({
@@ -363,8 +396,10 @@ export const useMatchStore = create<MatchStore>()(
   setSpeed(v) { set({ speed: v }) },
 
   toggleRun() {
-    const { running, ended } = get()
-    if (ended) return
+    const { running, ended, injurySub, halftimeVisible } = get()
+    // Modais obrigatórios (lesão/intervalo) travam o jogo: Space/Enter no
+    // botão de play ainda focado não pode religar por trás do modal
+    if (ended || injurySub || halftimeVisible) return
     set({ running: !running })
   },
 
@@ -508,9 +543,11 @@ export const useMatchStore = create<MatchStore>()(
     const out   = squad[fieldIdx]
     if (!sub || sub.injured || sub.usedInSub) return
 
-    const newSub = { ...sub, fieldPos: out.fieldPos }
+    const newSub = { ...sub, fieldPos: out.fieldPos, usedInSub: true }
     squad[fieldIdx] = newSub
-    const newBench = bench.map((p, i) => i === benchIdx ? { ...p, usedInSub: true } : p)
+    // Quem sai ocupa a vaga do banco (como no resolveInjurySub) — senão o
+    // substituído some da partida e o reserva fica duplicado em campo e no banco
+    const newBench = bench.map((p, i) => i === benchIdx ? { ...out, usedInSub: true } : p)
 
     const events = [...s.events]
     events.unshift({
@@ -871,6 +908,7 @@ export const useMatchStore = create<MatchStore>()(
   {
     name: 'glfoot-career',
     version: 1,
+    storage: throttledStorage(1000),
     partialize: (s) => ({
       myClubId:        s.myClubId,
       coachName:       s.coachName,
