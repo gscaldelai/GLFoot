@@ -35,7 +35,7 @@ import { useStadiumStore }     from './useStadiumStore'
 import { useConfidenceStore }             from './useConfidenceStore'
 import { CLUB_STRENGTH }                 from '@/data/clubStrength'
 import { getContractGoal, calcInitialBudget } from '@/data/clubGoals'
-import { getFormationBonus, pickBotFormation, type FormationKey } from '@/data/formations'
+import { getFormationBonus, pickBotFormation, FORMATIONS, slotToMatchPos, type FormationKey } from '@/data/formations'
 import { generateFixtures, type FixtureGame } from '@/engines/fixtureEngine'
 import { avgSquad } from '@/engines/matchEngine'
 import { buildClubCalendar, type CalendarGame, CUP_PRESTIGE } from '@/engines/calendarEngine'
@@ -380,11 +380,26 @@ export const useMatchStore = create<MatchStore>()(
 
     const golsH = poissonSample(calcLambda(avH, avA, true,  bonusH + coachLambdaBonus(repH)))
     const golsA = poissonSample(calcLambda(avA, avH, false, bonusA + coachLambdaBonus(repA)))
+
+    // Posiciona AMBOS os times pela formação. O time do jogador já vem posicionado
+    // (getLineupForMatch), mas os clubes bot gerados têm fieldPos [0,0] no JSON —
+    // sem isso o adversário empilhava tudo no canto e "sumia" do campo.
+    // Casa ocupa a metade esquerda; visitante é espelhado para a metade direita.
+    const positionSquad = (squad: Player[], formationKey: FormationKey, mirror: boolean): Player[] => {
+      const slots = FORMATIONS[formationKey]
+      return squad.map((p, i) => {
+        const slot = slots[i]
+        if (!slot) return p
+        const [x, y] = slotToMatchPos(slot)
+        return { ...p, fieldPos: [mirror ? 100 - x : x, y] as [number, number] }
+      })
+    }
+
     set({
       homeFormation, awayFormation,
       homeClub:   home,  awayClub:   away,
-      homeSquad:  JSON.parse(JSON.stringify(home.squad)),
-      awaySquad:  JSON.parse(JSON.stringify(away.squad)),
+      homeSquad:  positionSquad(JSON.parse(JSON.stringify(home.squad)), homeFormation, false),
+      awaySquad:  positionSquad(JSON.parse(JSON.stringify(away.squad)), awayFormation, true),
       homeBench:  JSON.parse(JSON.stringify(home.bench)),
       awayBench:  JSON.parse(JSON.stringify(away.bench)),
       subCount:   { home: 0, away: 0 },
