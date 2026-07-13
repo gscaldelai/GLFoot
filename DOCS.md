@@ -437,6 +437,16 @@ Estado central da carreira e da partida ao vivo.
 - `prepareMatch()` — pré-calcula gols via Poisson e agenda minutos
 - `tick()` — avança 1 segundo de jogo; credita bilheteria ao fim
 - `nextRound()` — avança rodada, simula bots, aplica fadiga, desconta salários
+- `closeSeasonEnd()` — fecha a temporada: registra o histórico, regenera os fixtures
+  (sorteio novo) e volta **direto ao hub** na temporada seguinte. Elenco, orçamento,
+  estádio, técnicos NPC e confiança são preservados (mesma carreira).
+
+**Persistência (`glfoot-career` v1):** `screen: 'match'` nunca é gravado (persiste
+`'hub'` — F5 no meio da partida volta ao hub e a rodada é re-disputada, pois o estado
+da partida ao vivo é transitório). No `onRehydrateStorage`, saves com `round > 38`
+reabrem o `seasonEndVisible` para não travar o fechamento da temporada; o callback
+**muta o `state` diretamente** (referenciar `useMatchStore` ali lança TDZ e aborta
+a hidratação).
 
 ### 7.2 useFinanceStore (`glfoot-finance` v1)
 
@@ -494,8 +504,9 @@ Escalação atual: 11 slots titulares + banco. Suporta drag-and-drop e substitui
 
 **v2 persiste `slots` e `bench`** (antes só `formation`) — fadiga, lesões, envelhecimento
 e jogadores contratados sobrevivem ao reload. Migração de v1 zera slots/bench (o `init()`
-do ManagerHub reconstrói do JSON do clube). `selectClub` limpa o lineup apenas ao trocar
-de clube — re-selecionar o mesmo clube (virada de temporada) preserva o elenco.
+do ManagerHub reconstrói do JSON do clube). `selectClub` **sempre** limpa o lineup: ele
+só é alcançado em carreira genuinamente nova (a virada de temporada não passa mais pelo
+ClubSelect — o elenco envelhecido segue direto para a temporada seguinte).
 
 ### 7.7 useCoachStore (`glfoot-coaches` v1)
 
@@ -836,9 +847,10 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 - Jogos bot×bot no `nextRound` não sorteiam lesões.
 
 ### Temporadas
-- **Fluxo de virada de temporada quebrado** (pré-existente): `closeSeasonEnd` volta para a
-  tela de seleção e o `selectClub` reseta `season: 1`, orçamento e contratações. Corrigir em
-  sessão dedicada (ver tarefa "Corrigir fluxo de virada de temporada").
+- ~~Fluxo de virada de temporada quebrado~~ **Corrigido**: `closeSeasonEnd` agora vai
+  direto ao hub com fixtures regenerados; `selectClub` ficou exclusivo de carreira nova.
+- Orçamento faz **carry-over** entre temporadas (não há verba nova por temporada) — a meta
+  contratual e o `initialBudget` também não são renovados; o contrato cobre as 15 temporadas.
 
 ### Confiança
 - `electSeasonStar()` existe no engine mas não é chamada ao fim da temporada.

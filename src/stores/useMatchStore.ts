@@ -293,12 +293,9 @@ export const useMatchStore = create<MatchStore>()(
     useStadiumStore.getState().reset()
     useConfidenceStore.getState().reset()
     useCoachStore.getState().initCareer(clubId)
-    // Nova carreira em OUTRO clube: limpa o elenco persistido para o init()
-    // reconstruir do clube escolhido. Mesmo clube (ex: virada de temporada
-    // passa pelo ClubSelect) preserva o elenco atual (envelhecimento etc.).
-    if (get().myClubId !== clubId) {
-      useLineupStore.setState({ slots: [], bench: [], selected: null, dragSrc: null })
-    }
+    // Carreira nova (a virada de temporada não passa mais por aqui): limpa o
+    // elenco persistido para o init() reconstruir do clube escolhido.
+    useLineupStore.setState({ slots: [], bench: [], selected: null, dragSrc: null })
 
     const clubCalendar = buildClubCalendar(clubId)
 
@@ -308,9 +305,9 @@ export const useMatchStore = create<MatchStore>()(
 
     set({
       myClubId: clubId, coachName, coachNationality, standings, screen: 'hub',
-      season: 1, round: 1, matchHistory: [], events: [],
+      season: 1, round: 1, matchHistory: [], events: [], completedSeasons: [],
       contractGoal, initialBudget, fixtures, acquiredPlayers: [],
-      clubCalendar, cupStatus,
+      clubCalendar, cupStatus, seasonEndVisible: false, victoryVisible: false,
     })
   },
 
@@ -794,8 +791,13 @@ export const useMatchStore = create<MatchStore>()(
       const newCalendar = s.myClubId ? buildClubCalendar(s.myClubId) : s.clubCalendar
       const newCupStatus: Record<string, 'active' | 'eliminated'> = {}
       newCalendar.forEach(g => { newCupStatus[g.competitionId] = 'active' })
-      set({ seasonEndVisible: false, season: nextSeason, round: 1, screen: 'select',
+      // Novo sorteio de confrontos: embaralha a ordem para variar o calendário
+      const shuffledIds = s.standings.map(r => r.id).sort(() => Math.random() - 0.5)
+      // Continua a MESMA carreira: vai direto ao hub, sem passar pelo ClubSelect
+      // (que resetaria temporada, orçamento e técnicos — bug da virada de temporada)
+      set({ seasonEndVisible: false, season: nextSeason, round: 1, screen: 'hub',
             matchHistory: [], standings: s.standings.map(r => ({ ...r, pts:0,j:0,v:0,e:0,d:0,gf:0,ga:0 })),
+            fixtures: generateFixtures(shuffledIds),
             clubCalendar: newCalendar, cupStatus: newCupStatus })
     }
   },
@@ -878,7 +880,20 @@ export const useMatchStore = create<MatchStore>()(
       acquiredPlayers: s.acquiredPlayers,
       clubCalendar:    s.clubCalendar,
       cupStatus:       s.cupStatus,
-      screen:          s.screen,
+      // O estado da partida ao vivo é transitório: um F5 em 'match' voltaria
+      // a uma tela de jogo vazia e sem saída — persiste 'hub' e a rodada é
+      // re-disputada.
+      screen:          s.screen === 'match' ? 'hub' as const : s.screen,
     }),
+    // Roda sincronamente durante o create() — mutar o state diretamente
+    // (referenciar useMatchStore aqui lança TDZ e aborta a hidratação)
+    onRehydrateStorage: () => (state) => {
+      if (!state) return
+      // Saves antigos podem ter 'match' gravado
+      if (state.screen === 'match') state.screen = 'hub'
+      // F5 durante o fim de temporada (rodada 39): reabre o overlay,
+      // senão a carreira fica travada sem como fechar a temporada
+      if (state.round > 38) state.seasonEndVisible = true
+    },
   },
 ))

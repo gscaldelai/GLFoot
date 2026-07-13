@@ -402,6 +402,9 @@ function NextMatchCard() {
   const myClubId = useMatchStore(s => s.myClubId)
   const round    = useMatchStore(s => s.round)
   const fixtures = useMatchStore(s => s.fixtures)
+  // Hook precisa vir ANTES do early return (regra dos hooks — senão o React
+  // desmonta a árvore inteira quando o fixture da rodada não existe)
+  const myFormation = useLineupStore(s => s.formation)
 
   const nextFix = myClubId ? getNextFixture(fixtures, myClubId, round) : undefined
   if (!nextFix) return null
@@ -421,7 +424,6 @@ function NextMatchCard() {
   const oppFormation = pickBotFormation(seed)
 
   // Bônus tático da minha formação contra a formação do adversário
-  const myFormation  = useLineupStore(s => s.formation)
   const tacBonus     = getFormationBonus(myFormation, oppFormation)
   const tacAdvantage = tacBonus > 0 ? 'win' : getFormationBonus(oppFormation, myFormation) > 0 ? 'lose' : 'neutral'
 
