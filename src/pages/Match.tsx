@@ -5,6 +5,7 @@ import GoalOverlay  from '@/components/GoalOverlay'
 import VictoryOverlay from '@/components/VictoryOverlay'
 import HalftimeOverlay from '@/components/HalftimeOverlay'
 import InjurySubModal from '@/components/InjurySubModal'
+import MatchAdjustments from '@/components/MatchAdjustments'
 
 export default function Match() {
   return (
@@ -18,6 +19,7 @@ export default function Match() {
       <VictoryOverlay />
       <HalftimeOverlay />
       <InjurySubModal />
+      <MatchAdjustments />
     </div>
   )
 }

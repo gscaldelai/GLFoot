@@ -8,7 +8,7 @@ export default function HalftimeOverlay() {
   const ga              = useMatchStore(s => s.ga)
   const myClubId        = useMatchStore(s => s.myClubId)
   const subCount        = useMatchStore(s => s.subCount)
-  const closeHalftime   = useMatchStore(s => s.closeHalftime)
+  const openAdjustments = useMatchStore(s => s.openAdjustments)
   const startSecondHalf = useMatchStore(s => s.startSecondHalf)
 
   if (!visible || !homeClub || !awayClub) return null
@@ -42,12 +42,12 @@ export default function HalftimeOverlay() {
 
         <div className="flex justify-center gap-3">
           <button
-            onClick={closeHalftime}
+            onClick={openAdjustments}
             className="bg-surface2 border border-[#3a5a74] rounded-lg px-6 py-[12px] font-bebas
                        text-[16px] text-[#8ab0c8] tracking-[2px] cursor-pointer
                        hover:border-gold hover:text-gold transition-colors"
           >
-            🔁 FAZER AJUSTES
+            ⚙ FAZER AJUSTES
           </button>
           <button
             onClick={startSecondHalf}

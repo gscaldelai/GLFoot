@@ -22,6 +22,7 @@ export default function Scoreboard() {
   const ended     = useMatchStore(s => s.ended)
   const speed     = useMatchStore(s => s.speed)
   const toggleRun      = useMatchStore(s => s.toggleRun)
+  const openAdjustments = useMatchStore(s => s.openAdjustments)
   const setSpeed       = useMatchStore(s => s.setSpeed)
   const tick           = useMatchStore(s => s.tick)
   const myClubId       = useMatchStore(s => s.myClubId)
@@ -148,6 +149,17 @@ export default function Scoreboard() {
           )
         })}
       </div>
+
+      {/* Ajustes (só com o jogo pausado) */}
+      {!running && !ended && (
+        <button
+          onClick={openAdjustments}
+          className="px-[12px] py-[5px] rounded font-bold text-[13px] tracking-wide border transition-all duration-200
+                     bg-surface2 border-[#3a5a74] text-[#8ab0c8] hover:border-gold hover:text-gold"
+        >
+          ⚙ AJUSTES
+        </button>
+      )}
 
       {/* Play/Pausa */}
       <button

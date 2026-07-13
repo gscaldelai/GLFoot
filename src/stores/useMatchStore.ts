@@ -35,7 +35,7 @@ import { useStadiumStore }     from './useStadiumStore'
 import { useConfidenceStore }             from './useConfidenceStore'
 import { CLUB_STRENGTH }                 from '@/data/clubStrength'
 import { getContractGoal, calcInitialBudget } from '@/data/clubGoals'
-import { getFormationBonus, pickBotFormation, FORMATIONS, slotToMatchPos, type FormationKey } from '@/data/formations'
+import { getFormationBonus, pickBotFormation, FORMATIONS, slotToMatchPos, assignToFormation, type FormationKey } from '@/data/formations'
 import { generateFixtures, type FixtureGame } from '@/engines/fixtureEngine'
 import { avgSquad } from '@/engines/matchEngine'
 import { buildClubCalendar, type CalendarGame, CUP_PRESTIGE } from '@/engines/calendarEngine'
@@ -152,6 +152,7 @@ interface MatchStore {
   seasonEndVisible: boolean
   halftimeVisible: boolean   // modal de intervalo aberto
   halftimeDone:    boolean   // intervalo já ocorreu nesta partida
+  adjustingVisible: boolean  // tela dedicada de ajustes táticos aberta
   injurySub:       InjurySub | null   // substituição obrigatória pendente (G-02)
 
   // ── screen ────────────────────────────────────────────
@@ -169,6 +170,9 @@ interface MatchStore {
   closeVictory:    () => void
   closeHalftime:   () => void   // fecha modal e mantém pausado (ajustes)
   startSecondHalf: () => void   // fecha modal e retoma o jogo
+  openAdjustments:  () => void  // abre a tela de ajustes (pausa o jogo)
+  closeAdjustments: () => void  // aplica os ajustes e retoma o jogo
+  changeMyFormation: (f: FormationKey) => void  // troca a formação do meu time em campo
   resolveInjurySub: (benchIdx: number | null) => void  // null = seguir com 10
   switchClub:      (clubId: string) => void  // aceita proposta pós-demissão (F-01)
   nextRound:       () => void
@@ -309,6 +313,7 @@ export const useMatchStore = create<MatchStore>()(
   dragSrc: null, goalFlash: null,
   victoryVisible: false, seasonEndVisible: false,
   halftimeVisible: false, halftimeDone: false,
+  adjustingVisible: false,
   injurySub: null,
   screen: 'select',
 
@@ -411,6 +416,7 @@ export const useMatchStore = create<MatchStore>()(
       sideEvents: genSideEvents(), events: [],
       goalFlash: null, victoryVisible: false,
       halftimeVisible: false, halftimeDone: false,
+      adjustingVisible: false,
       injurySub: null,
     })
   },
@@ -418,10 +424,10 @@ export const useMatchStore = create<MatchStore>()(
   setSpeed(v) { set({ speed: v }) },
 
   toggleRun() {
-    const { running, ended, injurySub, halftimeVisible } = get()
-    // Modais obrigatórios (lesão/intervalo) travam o jogo: Space/Enter no
-    // botão de play ainda focado não pode religar por trás do modal
-    if (ended || injurySub || halftimeVisible) return
+    const { running, ended, injurySub, halftimeVisible, adjustingVisible } = get()
+    // Modais/telas que travam o jogo (lesão/intervalo/ajustes): Space/Enter no
+    // botão de play ainda focado não pode religar por trás deles
+    if (ended || injurySub || halftimeVisible || adjustingVisible) return
     set({ running: !running })
   },
 
@@ -593,6 +599,31 @@ export const useMatchStore = create<MatchStore>()(
   closeHalftime:   () => set({ halftimeVisible: false }),
 
   startSecondHalf: () => set({ halftimeVisible: false, running: true }),
+
+  // Tela de ajustes: pausa o jogo e fecha o modal de intervalo (se aberto)
+  openAdjustments:  () => set({ adjustingVisible: true, halftimeVisible: false, running: false }),
+  // "Voltar ao jogo": fecha a tela e retoma a partida
+  closeAdjustments: () => set({ adjustingVisible: false, running: true }),
+
+  changeMyFormation(f) {
+    const s = get()
+    const isMyHome = s.homeClub?.id === s.myClubId
+    const side  = isMyHome ? 'home' : 'away'
+    const squad = side === 'home' ? s.homeSquad : s.awaySquad
+    // Reatribui os jogadores em campo aos slots da nova formação (GK no fundo etc.)
+    // e converte para fieldPos — espelhado se meu time for o visitante (metade direita).
+    const { slots } = assignToFormation(squad, f)
+    const positioned = slots
+      .map((p, i) => {
+        if (!p) return null
+        const [x, y] = slotToMatchPos(FORMATIONS[f][i])
+        return { ...p, fieldPos: [isMyHome ? x : 100 - x, y] as [number, number] }
+      })
+      .filter(Boolean) as Player[]
+    set(side === 'home'
+      ? { homeSquad: positioned, homeFormation: f }
+      : { awaySquad: positioned, awayFormation: f })
+  },
 
   resolveInjurySub(benchIdx) {
     const s = get()

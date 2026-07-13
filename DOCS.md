@@ -687,8 +687,17 @@ Hub principal com sidebar de 48px e área de conteúdo. Atalhos: F4 Jogos · F5 
 
 ### Match
 Partida ao vivo com:
-- Campo SVG + discos de jogadores com posicionamento real
+- Campo SVG + discos de jogadores com posicionamento real. **Ambos os times são
+  posicionados pela formação no `prepareMatch`** (casa na metade esquerda, visitante
+  espelhado na direita) — os clubes bot gerados têm `fieldPos [0,0]` no JSON e, sem
+  isso, o adversário empilhava no canto e "sumia".
 - Banco drag-and-drop para substituições (máx 3/time)
+- **Tela de Ajustes Táticos** (`MatchAdjustments`): abre pelo botão ⚙ AJUSTES do
+  Scoreboard (com o jogo pausado) ou pelo "FAZER AJUSTES" do intervalo. Mostra só o
+  meu time — seletor de formação (troca reposiciona o elenco via `changeMyFormation`),
+  campo com clique-para-selecionar e banco de reservas para substituir. "▶ Voltar ao
+  Jogo" (`closeAdjustments`) aplica e retoma a partida. `toggleRun` fica travado
+  enquanto a tela está aberta (`adjustingVisible`).
 - Timer real com velocidades 1× · 1.5× · 2× (1.5× e 2× bloqueados no Free)
 - Gols pré-agendados via Poisson (invisíveis ao jogador)
 - Eventos laterais aleatórios (faltas, cartões, VAR)
