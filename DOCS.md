@@ -375,9 +375,11 @@ de gols em 2.5–3.0 (`scripts/test-coach.js`).
 
 ```typescript
 generateInitialCoaches(playerClubId) // 19 técnicos (reputação por tier) + 6 no mercado livre
-processCoachRound(coaches, standings, round, season)
+processCoachRound(coaches, standings, round, season, playerClubId)
 // pressão: 6+ posições abaixo do esperado → 5 rodadas seguidas = demissão
 // (proteção: 5 rodadas no cargo; liga só demite a partir da rodada 6)
+// playerClubId: o clube do jogador é pulado no laço de contratação — sem ele, como
+// nunca há Coach com o clubId do jogador, a liga contratava um NPC para ele (R-18)
 coachLambdaBonus(reputation)         // (rep − 3) × 0.025 → 5★ +0.05 · 1★ −0.05
 calcPlayerReputation(seasons)        // 1–5★: base 2 · título +1 · G4 +0.5 · Z4 −0.5
 buildPlayerOffers(rep, excludeClub)  // até 3 clubes com tier compatível
@@ -502,6 +504,11 @@ Persiste estado do estádio entre sessões.
 - Torcida crítica por 2 rodadas consecutivas
 - Ambos abaixo de 35 simultaneamente
 
+As funções de confiança fazem `if (isFired) return` (medidores congelam após a demissão).
+`clearFired()` (botão "Continuar (debug)" do FiredModal) desfaz a demissão **e** levanta os
+medidores acima do alerta (`diretoria≥45`, `torcida≥40`, alertRounds zerados) — só limpar a
+flag os deixaria congelados e a rodada seguinte re-demitiria (R-17).
+
 ### 7.5 useTransferStore (`glfoot-transfers` v1)
 
 Controla quais jogadores estão listados para venda/empréstimo.  
@@ -518,6 +525,16 @@ do ManagerHub reconstrói do JSON do clube). `selectClub` **sempre** limpa o lin
 só é alcançado em carreira genuinamente nova (a virada de temporada não passa mais pelo
 ClubSelect — o elenco envelhecido segue direto para a temporada seguinte).
 
+**Guard de reconstrução (R-16):** o mount do ManagerHub só reconstrói do JSON quando NÃO
+há elenco salvo em lugar nenhum (`slots` vazios **E** `bench` vazio). Olhar só os slots
+reconstruía ao dispensar os 11 titulares — apagando os contratados (que vivem no banco) e
+ressuscitando os dispensados. Os contratados são adicionados ao `bench` (`executeTransfer`).
+
+**JOGAR exige escalação completa (R-15):** `getLineupForMatch()` filtra os slots `null`, então
+uma escalação incompleta entraria em campo com menos de 11. O botão JOGAR fica desabilitado
+(com aviso) e `handleJogar` bloqueia quando `slots.length === 0 || slots.some(p => !p)` — além
+do bloqueio por jogador lesionado (G-02).
+
 ### 7.7 useCoachStore (`glfoot-coaches` v1)
 
 Técnicos NPC, mercado livre, notícias de movimentação (últimas 30) e propostas
@@ -525,11 +542,12 @@ pendentes para o jogador demitido. `processRound` é chamado pelo `nextRound`;
 carreiras antigas ganham técnicos via backfill no mount do ManagerHub.
 
 Na virada de temporada, `closeSeasonEnd` chama `onSeasonTurnover()` para zerar
-`hiredRound`/`pressure` de todos os técnicos — sem isso, quem foi contratado no fim
-da temporada ficaria protegido pela janela de graça (`GRACE_ROUNDS`) a temporada
-seguinte inteira. Os ids de técnicos cunhados em runtime derivam de `max(ids)+1`
-sobre a lista existente (não de um contador módulo-level, que reiniciaria no reload
-e colidiria com os coaches persistidos).
+`hiredRound`/`pressure` de todos os técnicos **e limpar `news`** — sem isso, quem foi
+contratado no fim da temporada ficaria protegido pela janela de graça (`GRACE_ROUNDS`) a
+temporada seguinte inteira, e as movimentações da temporada anterior vazariam para a nova
+(a UI mostra só "R{round}", sem temporada — R-19). Os ids de técnicos cunhados em runtime
+derivam de `max(ids)+1` sobre a lista existente (não de um contador módulo-level, que
+reiniciaria no reload e colidiria com os coaches persistidos).
 
 ### 7.8 useAuthStore (`glfoot-auth` v1)
 

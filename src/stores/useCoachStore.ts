@@ -18,7 +18,7 @@ interface CoachStore {
   playerOffers: string[]       // clubIds com proposta para o jogador demitido
 
   initCareer:   (playerClubId: string) => void
-  processRound: (standings: { id: string }[], round: number, season: number) => void
+  processRound: (standings: { id: string }[], round: number, season: number, playerClubId: string | null) => void
   coachOf:      (clubId: string) => Coach | undefined
   freeAgents:   () => Coach[]
 
@@ -43,8 +43,8 @@ export const useCoachStore = create<CoachStore>()(
         set({ coaches: generateInitialCoaches(playerClubId), news: [], playerOffers: [] })
       },
 
-      processRound(standings, round, season) {
-        const { coaches, news } = processCoachRound(get().coaches, standings, round, season)
+      processRound(standings, round, season, playerClubId) {
+        const { coaches, news } = processCoachRound(get().coaches, standings, round, season, playerClubId)
         set({
           coaches,
           news: [...news.reverse(), ...get().news].slice(0, 30),
@@ -75,8 +75,14 @@ export const useCoachStore = create<CoachStore>()(
       // sem reset, técnico contratado no fim da temporada N mantém
       // round - hiredRound < GRACE_ROUNDS a temporada N+1 inteira (imune a
       // demissão). A pressão acumulada também não atravessa temporadas.
+      // `news` são movimentações da temporada corrente e são exibidas só como
+      // "R{round}" (sem temporada) — sem limpar, vazam para a nova temporada e
+      // ficam ambíguas (R-19).
       onSeasonTurnover() {
-        set({ coaches: get().coaches.map(c => ({ ...c, hiredRound: 0, pressure: 0 })) })
+        set({
+          coaches: get().coaches.map(c => ({ ...c, hiredRound: 0, pressure: 0 })),
+          news: [],
+        })
       },
 
       reset: () => set({ coaches: [], news: [], playerOffers: [] }),

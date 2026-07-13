@@ -4,7 +4,7 @@
 **Testador:** GustãoFC (usuário real) + revisão adversarial automatizada (12/07)  
 **Sessão de teste:** 3+ partidas simuladas (SPFC × Corinthians, outros)  
 **Total de itens:** 14 originais (todos resolvidos) + backlog R-xx da revisão de 12/07  
-**Status:** ✅ 27 resolvidos · 🔍 6 achados a triar (seção "Revisão adversarial 12/07")
+**Status:** ✅ Backlog zerado — 14 itens originais + R-00..R-19 todos resolvidos e verificados
 
 ---
 
@@ -182,16 +182,38 @@ no browser:
   intacto (regra do projeto; `npm run test:engine` segue passando). Verificado: força persistida
   de 16 jogadores == força exibida na fase Contratos (100% de match).
 
-**A triar:**
-
-| ID | Sev. | Descrição | Onde |
-|----|------|-----------|------|
-| R-15 | 🟡 | JOGAR não bloqueia escalação incompleta (slots null passam; só lesionado bloqueia) | `ManagerHub.tsx` |
-| R-16 | 🟠 | Guard de init do lineup só olha slots: 11 titulares dispensados → mount re-inicializa do JSON, ressuscitando dispensados e apagando contratados | `ManagerHub.tsx` |
-| R-17 | 🟢 | Botão "Continuar (debug)" do FiredModal é no-op (não limpa `isFired`) | `ManagerHub.tsx` |
-| R-18 | 🟡 | `processCoachRound` contrata técnico NPC para o clube DO JOGADOR na 1ª rodada, violando invariante documentado | `coachEngine.ts` |
-| R-19 | 🟢 | Notícias de técnicos da temporada anterior vazam para a nova (news não limpa; UI mostra só "R{round}") | `CoachesView.tsx` |
+**Triados e resolvidos em 13/07 (lote R-15..R-19)** — todos confirmados como bugs reais e
+verificados no browser (checks via `window.glfoot` + fluxo pela UI):
+- ✅ **R-15** 🟡 `handleJogar` e o botão JOGAR só barravam jogador lesionado; slot vazio (escalação
+  incompleta) passava e `getLineupForMatch()` filtra os `null`, então o time entraria com menos de 11.
+  *Corrigido*: `incompleteLineup` (`slots.length === 0 || slots.some(p => !p)`) desabilita o botão,
+  exibe aviso "Escalação incompleta" e o guard de `handleJogar` bloqueia. Verificado: com 1 slot vazio
+  o botão fica `disabled` e o clique não inicia a partida (tela segue no hub); o aviso pluraliza
+  ("o lugar vazio" / "os N lugares vazios"); escalação completa reabilita o botão.
+- ✅ **R-16** 🟠 O guard de init do lineup (`slots.filter(Boolean).length === 0`) reconstruía do JSON
+  do clube sempre que os 11 titulares eram dispensados — apagando os contratados (que vivem no banco)
+  e ressuscitando os dispensados. *Corrigido*: só reconstrói quando NÃO há elenco salvo em lugar nenhum
+  (`slots` vazios **E** `bench` vazio = carreira nova). Verificado: com 11 slots nulos + banco contendo
+  "ContratadoQA", o F5 não ressuscitou nenhum titular nem apagou o contratado; carreira nova (slots e
+  banco vazios) segue reconstruindo os 11+5 do JSON.
+- ✅ **R-17** 🟢 O botão "Continuar (debug)" do FiredModal chamava só `goToHub()` (que apenas faz
+  `set({screen:'hub'})`), sem limpar `isFired` nem `firedDismissed` — no-op, o modal continuava aberto.
+  *Corrigido*: novo `clearFired()` no confidence store desfaz a demissão e levanta os medidores acima do
+  alerta (as funções de confiança fazem `if (isFired) return`, então só limpar a flag os congelaria e a
+  rodada seguinte re-demitiria). Verificado: o clique fecha o modal, `isFired:false`, diretoria/torcida
+  → 45/40 e `dir/torAlertRounds` zerados.
+- ✅ **R-18** 🟡 `processCoachRound` não conhecia o clube do jogador; como ele nunca tem Coach com seu
+  clubId, aparecia "sem técnico" e a liga contratava um NPC para o clube DO JOGADOR na 1ª rodada.
+  *Corrigido*: `processRound`/`processCoachRound` recebem `playerClubId` (via `s.myClubId`) e pulam o
+  clube do jogador no laço de contratação. Verificado: com o comportamento antigo (sem o id) o SPFC
+  ganhava "Adenor Sampaio"; com o fix o SPFC fica sem NPC e os 19 bots de `CLUB_STRENGTH` seguem todos
+  com técnico. (Nota lateral pré-existente: `palm` no `clubs/index` não casa com o id `palmeiras` do
+  `CLUB_STRENGTH` — fora do escopo deste lote.)
+- ✅ **R-19** 🟢 `onSeasonTurnover` não limpava `news`, então as movimentações de técnicos da temporada
+  anterior vazavam para a nova (a UI mostra só "R{round}", sem temporada, ficando ambíguas).
+  *Corrigido*: `onSeasonTurnover` zera `news: []` (mantendo o reset de `hiredRound`/`pressure` do R-06).
+  Verificado: 2 notícias + técnicos com `hiredRound 36`/`pressure 3` → `news: 0` e `0/0` após a virada.
 
 ---
 
-*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Próxima sessão de QA: triagem dos R-15..R-19*
+*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Backlog da revisão adversarial 12/07 zerado em 13/07.*

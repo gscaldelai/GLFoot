@@ -125,6 +125,7 @@ export function processCoachRound(
   standings: { id: string }[],
   round:    number,
   season:   number,
+  playerClubId: string | null,
 ): RoundResult {
   const expected = expectedPositions()
   const news: CoachNews[] = []
@@ -162,7 +163,10 @@ export function processCoachRound(
   const clubsWithCoach = new Set(updated.filter(c => c.clubId).map(c => c.clubId))
   for (const entry of CLUB_STRENGTH) {
     if (clubsWithCoach.has(entry.id)) continue
-    // (clube do jogador não entra — nunca há Coach com clubId dele)
+    // O clube do jogador nunca tem técnico NPC. Como generateInitialCoaches não
+    // cria um Coach com o clubId dele, ele aparece "sem técnico" aqui e a liga
+    // contrataria um NPC para o clube DO JOGADOR na 1ª rodada (R-18) — pula.
+    if (entry.id === playerClubId) continue
     if (!updated.some(c => c.clubId === null)) break
 
     const minRep   = MIN_REPUTATION_BY_TIER[entry.tier]

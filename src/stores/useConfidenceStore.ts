@@ -53,6 +53,9 @@ interface ConfidenceStore {
 
   // Reseta para nova carreira
   reset: () => void
+
+  // "Continuar (debug)": limpa a demissão e devolve os medidores acima do alerta
+  clearFired: () => void
 }
 
 export interface MatchResultParams {
@@ -305,6 +308,20 @@ export const useConfidenceStore = create<ConfidenceStore>()(
           diretoria: 70, torcida: 65,
           dirAlertRounds: 0, torAlertRounds: 0,
           isFired: false, firedBy: null, events: [],
+        })
+      },
+
+      // "Continuar (debug)": desfaz a demissão sem começar carreira nova.
+      // As funções de confiança fazem `if (isFired) return`, então só limpar a
+      // flag congelaria os medidores; e sem levantá-los acima do alerta a
+      // diretoria/torcida re-demitiriam na rodada seguinte. (R-17)
+      clearFired() {
+        const s = get()
+        set({
+          isFired: false, firedBy: null,
+          dirAlertRounds: 0, torAlertRounds: 0,
+          diretoria: Math.max(s.diretoria, 45),
+          torcida:   Math.max(s.torcida, 40),
         })
       },
     }),

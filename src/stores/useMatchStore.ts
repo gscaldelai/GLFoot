@@ -783,7 +783,8 @@ export const useMatchStore = create<MatchStore>()(
     }
 
     // ── Técnicos NPC: pressão, demissões e contratações (F-01) ─────────────
-    useCoachStore.getState().processRound(standings, s.round, s.season)
+    // Passa o clube do jogador: a liga não contrata NPC para ele (R-18)
+    useCoachStore.getState().processRound(standings, s.round, s.season, s.myClubId)
     // ──────────────────────────────────────────────────────────────────────
 
     const nextRound = s.round + 1

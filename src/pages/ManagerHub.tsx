@@ -128,7 +128,7 @@ function FiredModal({ onViewOffers }: { onViewOffers: () => void }) {
           )}
           <div className="flex gap-3">
             <button
-              onClick={goToHub}
+              onClick={() => { useConfidenceStore.getState().clearFired(); goToHub() }}
               className="flex-1 py-[8px] rounded-lg border border-border text-[13px] text-[#5a7080]
                          hover:text-white hover:border-[#2a3d52] transition-all font-bebas tracking-[1px]"
             >
@@ -177,7 +177,11 @@ export default function ManagerHub() {
   useEffect(() => {
     if (initialized.current) return
     initialized.current = true
-    if (useLineupStore.getState().slots.filter(Boolean).length === 0) {
+    // Só reconstrói do JSON quando NÃO há elenco salvo (carreira nova). Olhar só
+    // os slots ressuscitava dispensados e apagava contratados quando os 11
+    // titulares eram dispensados — os contratados vivem no bench (R-16).
+    const ls0 = useLineupStore.getState()
+    if (ls0.slots.filter(Boolean).length === 0 && ls0.bench.length === 0) {
       init([...myClub.squad, ...myClub.bench])
     }
     // Backfill: carreiras criadas antes do coach store ganham técnicos NPC (F-01)
@@ -637,9 +641,14 @@ function EscalacaoPanel({ myClub, opp }: { myClub: Club; opp: Club }) {
 
   // Lesionado não pode ser escalado (G-02)
   const injuredStarters = slots.filter((p): p is Player => !!p?.injured)
+  // Escalação incompleta (slot vazio) não pode jogar: getLineupForMatch filtra
+  // os null e o time entraria em campo com menos de 11 (R-15)
+  const incompleteLineup = slots.length === 0 || slots.some(p => !p)
+  const blocked = injuredStarters.length > 0 || incompleteLineup
 
   function handleJogar() {
-    if (useLineupStore.getState().slots.some(p => p?.injured)) return
+    const ls = useLineupStore.getState()
+    if (ls.slots.length === 0 || ls.slots.some(p => !p || p.injured)) return
     const lineup   = useLineupStore.getState().getLineupForMatch()
     const benchAll = useLineupStore.getState().bench
     const round    = useMatchStore.getState().round
@@ -678,12 +687,20 @@ function EscalacaoPanel({ myClub, opp }: { myClub: Club; opp: Club }) {
             substitua antes de jogar
           </div>
         )}
+        {incompleteLineup && injuredStarters.length === 0 && (() => {
+          const vazios = slots.length === 0 ? 11 : slots.filter(p => !p).length
+          return (
+            <div className="text-[11px] font-bold text-glred text-center leading-snug">
+              ⚠ Escalação incompleta — preencha {vazios === 1 ? 'o lugar vazio' : `os ${vazios} lugares vazios`} antes de jogar
+            </div>
+          )
+        })()}
         <button
           onClick={handleJogar}
-          disabled={injuredStarters.length > 0}
+          disabled={blocked}
           className={`w-full max-w-[320px] border-none rounded-lg py-[10px] font-bebas text-[18px]
                       tracking-[2px] transition-all duration-200
-                      ${injuredStarters.length > 0
+                      ${blocked
                         ? 'bg-surface2 text-gray-500 cursor-not-allowed'
                         : 'bg-gradient-to-br from-[#158040] to-[#20c060] text-black cursor-pointer hover:scale-[1.02] hover:shadow-[0_4px_20px_rgba(32,192,96,.5)]'}`}
         >
