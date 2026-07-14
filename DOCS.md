@@ -955,6 +955,11 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 - [ ] Algoritmo Estrela da Temporada rodando ao fim de cada temporada
 - [ ] Tela de Fim de Temporada: resumo, evolução Age Curve, status do contrato
 - [ ] Adversários no calendário: gerar fixture completa ao iniciar temporada
+- [ ] **Mercado sem jogadores à venda/empréstimo** — `selectClub` limpa as listagens
+  (`useTransferStore.clearAll`, R-07, para não vazar da carreira anterior), mas **nada
+  gera listagens novas**: os únicos dados eram os demo do Palmeiras. Falta os bots
+  colocarem jogadores à venda/empréstimo ao longo da temporada, senão os filtros
+  "À venda"/"Empréstimo" ficam vazios a carreira inteira. (Relatado: rodada 12, nada listado.)
 
 ### Médio Prazo
 - [ ] `MY_CLUB_FORCE` derivado do elenco real em TransferMarket
@@ -969,6 +974,12 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
   (G/L/Z/V/M/A), diferente do badge de 2-3 letras do pré-jogo (GK/ZAG/VOL/MEI/ME/ATA).
 - [ ] **Escudo do clube no placar da partida** (`Scoreboard`) — identificar os times
   pelo escudo (`ClubCrest`) em vez do nome/camisa (`Shirt`), como no ClubSelect/Mercado.
+- [ ] **Verificar + expor o fluxo financeiro** — a receita de bilheteria já é somada
+  no `nextRound` (`addIncome`, só jogos em casa) e a folha salarial já é descontada a
+  cada 4 rodadas (`deductWages`). Falta: (a) confirmar os valores (bilheteria por jogo
+  em casa, folha mensal correta) e (b) uma **tela de extrato/finanças** listando
+  receitas (bilheteria, prêmios) e despesas (salários, transferências, obras) por
+  rodada, para o jogador acompanhar o orçamento — hoje o efeito é invisível.
 
 ### Longo Prazo
 - [ ] Logos reais dos 20 clubes em `/public/assets/crests/{short}.png`
