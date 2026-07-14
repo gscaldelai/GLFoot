@@ -963,6 +963,10 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 - [ ] Central de Empregos funcional (Free: bloqueado, Premium: ativo)
 - [ ] Calendário dinâmico baseado no clube/estado do técnico (atualmente fixo SPFC)
 - [ ] Prêmios financeiros por posição final e conquistas
+- [ ] **Indicador de posição (1 letra) nos discos DURANTE a partida** — no campo
+  (`PlayerDisc`), na tela de Ajustes Táticos (`MatchAdjustments`) e no banco
+  (`BenchZone`), para facilitar as substituições ao vivo. Só a inicial da posição
+  (G/L/Z/V/M/A), diferente do badge de 2-3 letras do pré-jogo (GK/ZAG/VOL/MEI/ME/ATA).
 
 ### Longo Prazo
 - [ ] Logos reais dos 20 clubes em `/public/assets/crests/{short}.png`
