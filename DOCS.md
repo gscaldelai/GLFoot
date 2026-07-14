@@ -972,8 +972,11 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
   (`PlayerDisc`), na tela de Ajustes Táticos (`MatchAdjustments`) e no banco
   (`BenchZone`), para facilitar as substituições ao vivo. Só a inicial da posição
   (G/L/Z/V/M/A), diferente do badge de 2-3 letras do pré-jogo (GK/ZAG/VOL/MEI/ME/ATA).
-- [ ] **Escudo do clube no placar da partida** (`Scoreboard`) — identificar os times
-  pelo escudo (`ClubCrest`) em vez do nome/camisa (`Shirt`), como no ClubSelect/Mercado.
+- [ ] **Escudo do clube (`ClubCrest`) em vez da camisa/cores (`Shirt`) na UI** — usar o
+  emblema do clube, como já é no ClubSelect/Mercado, em: o **placar da partida**
+  (`Scoreboard`, hoje `Shirt` + nome) e o **topo da sidebar do hub** (`IconSidebar` em
+  `ManagerHub`, linha ~240, hoje `Shirt colors=myClub.colors`). Conferir também
+  `CoachesView` (usa `Shirt` na lista) — avaliar se troca lá também.
 - [ ] **Verificar + expor o fluxo financeiro** — a receita de bilheteria já é somada
   no `nextRound` (`addIncome`, só jogos em casa) e a folha salarial já é descontada a
   cada 4 rodadas (`deductWages`). Falta: (a) confirmar os valores (bilheteria por jogo
