@@ -980,6 +980,13 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
   em casa, folha mensal correta) e (b) uma **tela de extrato/finanças** listando
   receitas (bilheteria, prêmios) e despesas (salários, transferências, obras) por
   rodada, para o jogador acompanhar o orçamento — hoje o efeito é invisível.
+- [ ] **Tela de Tabelas com todas as competições** — hoje `StandingsScreen` é fixa no
+  Brasileirão (`<Standings />`). Adicionar um seletor das competições do clube
+  (`CLUB_COMPETITIONS`/`clubCalendar`: estaduais, Copa do Brasil, Libertadores/Sula,
+  etc.), mostrando a de liga como classificação e as de copa como chaveamento
+  (Mata-Mata). Deve ser possível ver **qualquer** competição mesmo já eliminado
+  (`cupStatus` só marca ativo/eliminado — falta guardar o chaveamento/resultados das
+  copas para exibir).
 
 ### Longo Prazo
 - [ ] Logos reais dos 20 clubes em `/public/assets/crests/{short}.png`
