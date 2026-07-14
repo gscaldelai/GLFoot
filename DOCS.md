@@ -992,11 +992,29 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
     mais cara a luva, em curva acelerada (clube fraco pegando monstro paga fortuna; clube já forte
     pega o mesmo jogador barato). Ex.: força-78 num clube força-média-55 (gap 1) ≈ R$ 8,5M;
     o mesmo jogador num clube força-68 ≈ R$ 3,1M; força-85 num clube força-50 vindo p/ Série C
-    (gap 2) ≈ R$ 34M. Implementar como despesa categoria `luva` (débito no orçamento, sem crédito).
+    (gap 2) ≈ R$ 34M. Implementar como despesa categoria `luva` (débito no orçamento, sem
+    crédito). **Bloquear se saldo insuficiente para a luva** (igual à compra — decidido).
+  - **Trava de adversário do dia (anti-exploit, decidido):** dois clubes que se enfrentam numa
+    data **não podem comprar/emprestar jogadores entre si** naquele dia (ex.: no dia de
+    SPFC × CSA pela Copa do Brasil, nem SPFC nem CSA transacionam um com o outro). Vale para
+    compra E empréstimo. Fonte: fixture/calendário do dia (`clubCalendar`/fixtures da rodada);
+    bloquear no `TransferMarket` quando `fromClubId` for o adversário do jogo daquela data.
+  - **Empréstimo de divisão inferior→superior (clube grande pegando de série menor): sem luva**
+    (gap ≤ 0) — decidido.
+  - **[A decidir] Luva intra-divisão por excedente:** hoje a proposta zera a luva na mesma
+    divisão (gap 0) — dentro da Série A um clube fraco ainda empresta craque só pela reserva de
+    6 meses. Proposta: cobrar uma luva menor também intra-divisão, gated pelo excedente de força
+    — `luvaIntra = K_intra × forca × (excedente/10)²`, só quando `excedente ≥ ~8` (abaixo,
+    reforço "no seu nível", livre); `K_intra` < `K` cross. Alternativa simples: teto duro
+    intra-divisão (`forca ≤ suaMédia + ~12`, acima bloqueia sem opção de luva).
+  - **[A decidir] Variante ancorada no passe:** em vez de `forca × (1+exc/10)²`, usar
+    `luva = passe × (excedente/20) × gap` — o passe já embute idade/potencial/estrela (mais
+    realista, casa com o valor do card), porém menos previsível que a fórmula de força pura.
   - **Toca:** `marketEngine.ts` (`checkTransferEligibility` — nova lógica de divisão/luva + `calcLuva`),
     `useMatchStore.executeTransfer` (reserva 6m, luva-sink, contador de empréstimos),
-    `TransferMarket.tsx` (rodapé/tooltip com custo real). **⚠ Ao implementar, testar no browser:**
-    mesma divisão, cross-division com luva, estouro do limite de 3, e o débito correto no orçamento.
+    `TransferMarket.tsx` (rodapé/tooltip com custo real + trava de adversário do dia). **⚠ Ao
+    implementar, testar no browser:** mesma divisão, cross-division com luva, estouro do limite de
+    3, trava de adversário do dia, e o débito correto no orçamento.
 - [ ] Central de Empregos funcional (Free: bloqueado, Premium: ativo)
 - [ ] Calendário dinâmico baseado no clube/estado do técnico (atualmente fixo SPFC)
 - [ ] Prêmios financeiros por posição final e conquistas
