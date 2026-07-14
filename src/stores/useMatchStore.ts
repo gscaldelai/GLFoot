@@ -101,6 +101,8 @@ export interface AcquiredPlayer {
   type:       'buy' | 'loan'
   round:      number
   season:     number
+  passe:      number   // valor pago pelo passe (0 em empréstimo)
+  salary:     number   // salário mensal acordado
 }
 
 interface MatchStore {
@@ -966,9 +968,18 @@ export const useMatchStore = create<MatchStore>()(
     const ls = useLineupStore.getState()
     useLineupStore.setState({ bench: [...ls.bench, { ...player, contractYearsLeft: type === 'loan' ? 1 : player.contractYearsLeft }] })
 
-    const entry: AcquiredPlayer = { player, fromClubId, type, round: s.round, season: s.season }
+    const entry: AcquiredPlayer = {
+      player, fromClubId, type, round: s.round, season: s.season,
+      passe: type === 'buy' ? passe : 0, salary: sal,
+    }
     set({ acquiredPlayers: [...s.acquiredPlayers, entry] })
-    return { ok: true, msg: type === 'buy' ? `${player.name} contratado!` : `${player.name} emprestado!` }
+    const salTxt = `salário R$ ${(sal / 1e3).toFixed(0)} mil/mês`
+    return {
+      ok: true,
+      msg: type === 'buy'
+        ? `${player.name} contratado por R$ ${(passe / 1e6).toFixed(1)}M · ${salTxt}`
+        : `${player.name} emprestado · ${salTxt}`,
+    }
   },
   }),
   {

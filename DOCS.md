@@ -727,6 +727,13 @@ Tela unificada com:
 - Empréstimo: clube comprador ≥ força do vendedor − 25
 - Orçamento: passe + 6× salário mensal
 
+**Histórico de contratações:** o toast de sucesso do `executeTransfer` mostra o valor
+pago (`"X contratado por R$ 6.2M · salário R$ 200 mil/mês"`). O botão **📋 Contratações**
+abre um modal com todas as contratações **feitas pelo jogador nesta carreira**
+(`acquiredPlayers`, que registra `passe`/`salary`/`type`/`season`/`round` — bots não
+usam `executeTransfer`): atleta, clube de origem, tipo, passe, salário, quando, e o total
+investido em passes. Zera junto com a carreira (`selectClub`/`switchClub`).
+
 ---
 
 ## 10. Sistema Financeiro

@@ -10,7 +10,7 @@ import {
   checkTransferEligibility,
   fmtValue, fmtSalary,
 } from '@/engines/marketEngine'
-import { useMatchStore }    from '@/stores/useMatchStore'
+import { useMatchStore, type AcquiredPlayer } from '@/stores/useMatchStore'
 import { useTransferStore } from '@/stores/useTransferStore'
 import { useFinanceStore }  from '@/stores/useFinanceStore'
 import type { Player, Pos, Spec } from '@/engines/types'
@@ -86,6 +86,7 @@ export default function TransferMarket() {
   const isForLoan        = useTransferStore(s => s.isForLoan)
 
   const [transferMsg, setTransferMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   // ── Estado de navegação ──────────────────────────────
   const [selectedClubId, setSelectedClubId] = useState<string | null>(myClubId)
@@ -427,6 +428,15 @@ export default function TransferMarket() {
           <FilterChip active={filterOnlySale} onClick={() => setFilterOnlySale(v => !v)} label="💰 À venda" color="green" />
           <FilterChip active={filterOnlyLoan} onClick={() => setFilterOnlyLoan(v => !v)} label="🔄 Empréstimo" color="blue" />
 
+          {/* Histórico de contratações (só as feitas por você nesta carreira) */}
+          <button
+            onClick={() => setHistoryOpen(true)}
+            className="text-[11px] px-[10px] py-[4px] rounded-full border border-gold/40 bg-gold/10 text-gold
+                       hover:bg-gold/20 transition-colors font-medium"
+          >
+            📋 Contratações{acquiredPlayers.length ? ` (${acquiredPlayers.length})` : ''}
+          </button>
+
           {/* Reset */}
           {hasFilters && (
             <button onClick={resetFilters}
@@ -594,6 +604,86 @@ export default function TransferMarket() {
             </div>
           </>
         )}
+      </div>
+
+      {historyOpen && (
+        <AcquisitionsModal players={acquiredPlayers} onClose={() => setHistoryOpen(false)} />
+      )}
+    </div>
+  )
+}
+
+// ── Histórico de contratações do jogador ──────────────────
+function AcquisitionsModal({ players, onClose }: { players: AcquiredPlayer[]; onClose: () => void }) {
+  const list = [...players].reverse()   // mais recente primeiro
+  const totalPasse = players.reduce((s, a) => s + (a.passe ?? (a.type === 'buy' ? calcPasse(a.player) : 0)), 0)
+  const clubShort = (id: string) => CLUBS.find(c => c.id === id)?.short ?? id.toUpperCase()
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-6" onClick={onClose}>
+      <div className="bg-surface border border-gold/30 rounded-2xl w-full max-w-[660px] max-h-[80vh] flex flex-col overflow-hidden"
+           onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-surface2/50 flex-shrink-0">
+          <div>
+            <div className="font-bebas text-[22px] tracking-[3px] text-gold">📋 MINHAS CONTRATAÇÕES</div>
+            <div className="text-[11px] text-[#6a8090] mt-[2px]">
+              {players.length} atleta{players.length !== 1 ? 's' : ''} contratado{players.length !== 1 ? 's' : ''} por você ·
+              Total em passes: <span className="text-glgreen font-bold">R$ {fmtValue(totalPasse)}</span>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[#5a7080] hover:text-white text-[20px] leading-none px-2">✕</button>
+        </div>
+
+        {/* Lista */}
+        <div className="overflow-y-auto">
+          {list.length === 0 ? (
+            <div className="px-5 py-12 text-center text-[13px] text-[#4a6070]">
+              Você ainda não contratou nenhum atleta nesta carreira.
+            </div>
+          ) : (
+            <table className="w-full text-[12px]">
+              <thead className="sticky top-0 bg-surface2 z-10">
+                <tr className="text-[9px] uppercase tracking-[1px] text-[#4a6070] text-left">
+                  <th className="px-4 py-2">Atleta</th>
+                  <th className="px-2 py-2">De</th>
+                  <th className="px-2 py-2">Tipo</th>
+                  <th className="px-2 py-2 text-right">Passe</th>
+                  <th className="px-2 py-2 text-right">Salário</th>
+                  <th className="px-4 py-2 text-right">Quando</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((a, i) => {
+                  const passe  = a.passe  ?? (a.type === 'buy' ? calcPasse(a.player) : 0)
+                  const salary = a.salary ?? calcSalary(a.player)
+                  return (
+                    <tr key={`${a.fromClubId}_${a.player.num}_${i}`} className="border-t border-border/50 hover:bg-surface2/40">
+                      <td className="px-4 py-[7px]">
+                        <span className="text-white font-medium">{a.player.name}</span>
+                        <span className="text-[#5a7080] ml-1">#{a.player.num}</span>
+                      </td>
+                      <td className="px-2 py-[7px] text-[#8a9aaa]">{clubShort(a.fromClubId)}</td>
+                      <td className="px-2 py-[7px]">
+                        <span className={`text-[9px] font-bold border rounded px-[5px] py-[1px] ${
+                          a.type === 'buy'
+                            ? 'text-gold border-gold/40 bg-gold/10'
+                            : 'text-[#4090d0] border-[#4090d0]/40 bg-[#4090d0]/10'}`}>
+                          {a.type === 'buy' ? 'Compra' : 'Empréstimo'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-[7px] text-right text-glgreen">
+                        {a.type === 'buy' ? `R$ ${fmtValue(passe)}` : '—'}
+                      </td>
+                      <td className="px-2 py-[7px] text-right text-[#8a9aaa]">R$ {fmtSalary(salary)}</td>
+                      <td className="px-4 py-[7px] text-right text-[#6a8090]">T{a.season} · R{a.round}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   )
