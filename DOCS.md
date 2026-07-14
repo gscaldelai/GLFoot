@@ -987,6 +987,18 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
   (Mata-Mata). Deve ser possível ver **qualquer** competição mesmo já eliminado
   (`cupStatus` só marca ativo/eliminado — falta guardar o chaveamento/resultados das
   copas para exibir).
+- [ ] **Remover o sistema de Tiers (S/A/B/C)** — a força do clube deve ser a **média
+  dos atletas** (dinâmica, muda com transferências/envelhecimento), e ela é o único
+  balizador para convites a técnicos, transferências e empréstimos. Hoje o tier é usado
+  em 9 arquivos: `clubStrength.ts` (define `tier` + `forcaMedia` hardcoded → virar força
+  média do elenco), `coachEngine.ts` (`MIN_REPUTATION_BY_TIER` → limiar por força),
+  `clubGoals.ts` (`getContractGoal(tier, …)` → por força), `ClubSelect.tsx`
+  (`isAvailableOnFree` hoje por tier B/C + `TIER_LABEL` → por faixa de força),
+  `CoachesView.tsx` (coluna/label de tier), `useMatchStore.ts` (reputação/meta via tier).
+  Stadiums (`stadiums.ts`/`useStadiumStore.ts`/`StadiumView.tsx`) usam `forcaMedia`, não
+  tier — só garantir que a força continue disponível. **⚠ Ao implementar, testar:**
+  teste de mesa do coach (`npm run test:engine`/`test-coach.js`), gating Free/Premium,
+  transferências, empréstimos e convites a técnicos no browser.
 
 ### Longo Prazo
 - [ ] Logos reais dos 20 clubes em `/public/assets/crests/{short}.png`
