@@ -966,6 +966,7 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 - [ ] Confiança da Torcida: eliminação precoce de copa → penalidade
 - [ ] Sistema de negociação: fazer oferta → resposta do clube (aceitar/recusar/contraproposta)
 - [ ] **Reformular sistema de EMPRÉSTIMOS** (custo + limite + regra de divisão + luva).
+  **Especificação FECHADA (14/07) — pronta para uma rodada de implementação.**
   Hoje: reserva de 3 meses de salário, elegibilidade só por força (`força ≥ vendedor − 25`),
   sem limite por temporada, e a UI só mostra o custo da COMPRA (o aviso vermelho "passe + 6
   meses" é do `buyEligibility`); o empréstimo nunca exibe o próprio custo antes de confirmar.
@@ -1001,12 +1002,12 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
     bloquear no `TransferMarket` quando `fromClubId` for o adversário do jogo daquela data.
   - **Empréstimo de divisão inferior→superior (clube grande pegando de série menor): sem luva**
     (gap ≤ 0) — decidido.
-  - **[A decidir] Luva intra-divisão por excedente:** hoje a proposta zera a luva na mesma
-    divisão (gap 0) — dentro da Série A um clube fraco ainda empresta craque só pela reserva de
-    6 meses. Proposta: cobrar uma luva menor também intra-divisão, gated pelo excedente de força
-    — `luvaIntra = K_intra × forca × (excedente/10)²`, só quando `excedente ≥ ~8` (abaixo,
-    reforço "no seu nível", livre); `K_intra` < `K` cross. Alternativa simples: teto duro
-    intra-divisão (`forca ≤ suaMédia + ~12`, acima bloqueia sem opção de luva).
+  - **Luva intra-divisão por excedente (decidido):** também há luva na mesma divisão (gap 0),
+    mas **suave e só quando se puxa alguém acima da média do próprio elenco** —
+    `luvaIntra = K_intra × forca × (excedente/10)²`, só quando `excedente ≥ 8` (abaixo, reforço
+    "no seu nível", **livre**); `K_intra ≈ 4.000` (< `K = 10.000` do cross). Ex.: reforço no
+    nível (exc 4) = livre; CSA força-52 pegando craque força-78 (exc 26) ≈ R$ 2,1M. (Teto duro
+    descartado — a filosofia é encarecer, não proibir.)
   - **Luva ancorada na FORÇA (decidido):** fórmula `K × forca × (1+exc/10)² × gap` (variante
     ancorada no passe **descartada**). Racional: emprestar um jovem e ele voltar depois é rotina
     de clube — não se pune por idade/potencial; o que não pode é ceder um atleta forte a custo
