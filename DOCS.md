@@ -1007,9 +1007,10 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
     — `luvaIntra = K_intra × forca × (excedente/10)²`, só quando `excedente ≥ ~8` (abaixo,
     reforço "no seu nível", livre); `K_intra` < `K` cross. Alternativa simples: teto duro
     intra-divisão (`forca ≤ suaMédia + ~12`, acima bloqueia sem opção de luva).
-  - **[A decidir] Variante ancorada no passe:** em vez de `forca × (1+exc/10)²`, usar
-    `luva = passe × (excedente/20) × gap` — o passe já embute idade/potencial/estrela (mais
-    realista, casa com o valor do card), porém menos previsível que a fórmula de força pura.
+  - **Luva ancorada na FORÇA (decidido):** fórmula `K × forca × (1+exc/10)² × gap` (variante
+    ancorada no passe **descartada**). Racional: emprestar um jovem e ele voltar depois é rotina
+    de clube — não se pune por idade/potencial; o que não pode é ceder um atleta forte a custo
+    baixo, e a força já captura isso diretamente.
   - **Toca:** `marketEngine.ts` (`checkTransferEligibility` — nova lógica de divisão/luva + `calcLuva`),
     `useMatchStore.executeTransfer` (reserva 6m, luva-sink, contador de empréstimos),
     `TransferMarket.tsx` (rodapé/tooltip com custo real + trava de adversário do dia). **⚠ Ao
