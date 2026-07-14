@@ -967,6 +967,8 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
   (`PlayerDisc`), na tela de Ajustes Táticos (`MatchAdjustments`) e no banco
   (`BenchZone`), para facilitar as substituições ao vivo. Só a inicial da posição
   (G/L/Z/V/M/A), diferente do badge de 2-3 letras do pré-jogo (GK/ZAG/VOL/MEI/ME/ATA).
+- [ ] **Escudo do clube no placar da partida** (`Scoreboard`) — identificar os times
+  pelo escudo (`ClubCrest`) em vez do nome/camisa (`Shirt`), como no ClubSelect/Mercado.
 
 ### Longo Prazo
 - [ ] Logos reais dos 20 clubes em `/public/assets/crests/{short}.png`
