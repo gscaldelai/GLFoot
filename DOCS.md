@@ -965,6 +965,38 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 - [ ] `MY_CLUB_FORCE` derivado do elenco real em TransferMarket
 - [ ] Confiança da Torcida: eliminação precoce de copa → penalidade
 - [ ] Sistema de negociação: fazer oferta → resposta do clube (aceitar/recusar/contraproposta)
+- [ ] **Reformular sistema de EMPRÉSTIMOS** (custo + limite + regra de divisão + luva).
+  Hoje: reserva de 3 meses de salário, elegibilidade só por força (`força ≥ vendedor − 25`),
+  sem limite por temporada, e a UI só mostra o custo da COMPRA (o aviso vermelho "passe + 6
+  meses" é do `buyEligibility`); o empréstimo nunca exibe o próprio custo antes de confirmar.
+  Mudanças decididas:
+  - **UI:** mostrar o custo do empréstimo no rodapé/tooltip do botão (reserva de **6 meses** de
+    salário + salário/mês + luva quando houver), do mesmo jeito que a compra já mostra.
+  - **Reserva:** subir de **3 → 6 meses** de salário (`executeTransfer`, `useMatchStore` ~960:
+    `sal * 3` → `sal * 6`, e a checagem/texto correspondentes).
+  - **Limite de 3 empréstimos por temporada** — contador que zera na virada de temporada
+    (`onSeasonTurnover`), namespacado por usuário (R-10); bloquear o 4º com mensagem clara.
+  - **Regra de divisão (substitui o gap de 25):** empréstimo **na mesma divisão** (A→A, B→B,
+    C→C) usa só o mecanismo padrão (reserva de 6 meses). Empréstimo de **divisão superior para
+    inferior** (ex.: clube da Série B pegando jogador da Série A) exige uma **luva** paga ao
+    atleta — e esse dinheiro **some** (sink: não vai para o clube cedente nem para lugar nenhum;
+    objetivo é dificultar clube pequeno acumular atleta muito forte pagando pouco). Fonte do
+    dado: `division: 1|2|3` em `clubStrength.ts`. Empréstimo de divisão inferior→superior
+    (clube grande pegando jogador de série menor): sem luva (gap ≤ 0). **A definir:** se remover
+    de vez o gate de força intra-divisão ou manter um teto.
+  - **Algoritmo da luva (proposta a CALIBRAR e testar):**
+    `luva = K × forcaJogador × (1 + excedente/10)² × gapDivisao`, onde
+    `excedente = max(0, forcaJogador − forçaMédiaDoMeuClube)`,
+    `gapDivisao = divComprador − divVendedor` (≥1; 0 ⇒ sem luva), `K ≈ 10.000` (ajustar).
+    O termo `(1+excedente/10)²` é o coração: quanto mais o atleta supera a média do SEU elenco,
+    mais cara a luva, em curva acelerada (clube fraco pegando monstro paga fortuna; clube já forte
+    pega o mesmo jogador barato). Ex.: força-78 num clube força-média-55 (gap 1) ≈ R$ 8,5M;
+    o mesmo jogador num clube força-68 ≈ R$ 3,1M; força-85 num clube força-50 vindo p/ Série C
+    (gap 2) ≈ R$ 34M. Implementar como despesa categoria `luva` (débito no orçamento, sem crédito).
+  - **Toca:** `marketEngine.ts` (`checkTransferEligibility` — nova lógica de divisão/luva + `calcLuva`),
+    `useMatchStore.executeTransfer` (reserva 6m, luva-sink, contador de empréstimos),
+    `TransferMarket.tsx` (rodapé/tooltip com custo real). **⚠ Ao implementar, testar no browser:**
+    mesma divisão, cross-division com luva, estouro do limite de 3, e o débito correto no orçamento.
 - [ ] Central de Empregos funcional (Free: bloqueado, Premium: ativo)
 - [ ] Calendário dinâmico baseado no clube/estado do técnico (atualmente fixo SPFC)
 - [ ] Prêmios financeiros por posição final e conquistas
