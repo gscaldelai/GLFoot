@@ -227,4 +227,19 @@ verificados no browser (checks via `window.glfoot` + fluxo pela UI):
 
 ---
 
-*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Backlog da revisão adversarial 12/07 zerado em 13/07.*
+## Bugs encontrados jogando (a triar)
+
+- 🔲 **J-01** 🟠 **Lesão não recupera** — jogador (Maguinhos) lesionado "volta em 3 rodadas",
+  mas as rodadas passam e ele não volta (badge fica travado em `3r`). Investigação inicial:
+  `advanceInjuryRecovery` (`injuryEngine.ts`) está correta (decrementa `injuryRoundsLeft` e
+  cura em 0) e o `nextRound` a aplica no `useLineupStore` (slots+bench) toda rodada. Suspeita:
+  interação com o **write-back de fim de jogo** (`useMatchStore` ~723-745), que re-marca o
+  lesionado com `injuryRoundsLeft + 1` (compensação do decremento) — protegido por
+  `if (p.injured) return p`. Se esse guard não disparar (p.injured falso no lineup no momento
+  do write-back), o valor re-soma +1 toda rodada e a recuperação nunca progride → travado.
+  **A confirmar com trace em runtime** (injetar lesão e acompanhar `injuryRoundsLeft` rodada a
+  rodada). Relatado jogando em ~rodada com Maguinhos no banco marcado `3r`.
+
+---
+
+*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Backlog da revisão adversarial 12/07 zerado em 13/07 · J-01 (lesão) aberto em 14/07.*
