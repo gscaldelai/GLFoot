@@ -240,6 +240,18 @@ verificados no browser (checks via `window.glfoot` + fluxo pela UI):
   **A confirmar com trace em runtime** (injetar lesão e acompanhar `injuryRoundsLeft` rodada a
   rodada). Relatado jogando em ~rodada com Maguinhos no banco marcado `3r`.
 
+- 🔲 **J-02** 🟡 **Jogador lesionado segue no banco da partida** — um reserva indisponível
+  (lesionado) continua aparecendo no banco durante o jogo, quando não deveria estar lá (não pode
+  entrar). Causa localizada: em `prepareMatch` (`useMatchStore` ~410-411) o banco é copiado
+  verbatim do clube — `homeBench: JSON.parse(JSON.stringify(home.bench))` / idem `awayBench` —
+  **sem `.filter(p => !p.injured)`**. Logo, um lesionado no elenco entra no banco da partida e
+  vira reserva selecionável (banco em campo + tela de Ajustes / substituição). Correção prevista:
+  excluir lesionados do banco da partida (ao menos do time humano) ao montar `homeBench`/`awayBench`
+  — ou marcá-los como não-selecionáveis. Relacionado a [[J-01]]: como a lesão nunca zera, o
+  jogador permanece no banco indefinidamente. Relatado com Maguinhos (nº 3) marcado no banco.
+  **Ao corrigir, validar no browser** que o lesionado some do banco e que a contagem de reservas
+  disponíveis cai de acordo.
+
 ---
 
-*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Backlog da revisão adversarial 12/07 zerado em 13/07 · J-01 (lesão) aberto em 14/07.*
+*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Backlog da revisão adversarial 12/07 zerado em 13/07 · J-01 (lesão) e J-02 (lesionado no banco) abertos em 14/07.*
