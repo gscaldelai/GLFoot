@@ -985,11 +985,43 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 - [ ] Algoritmo Estrela da Temporada rodando ao fim de cada temporada
 - [ ] Tela de Fim de Temporada: resumo, evolução Age Curve, status do contrato
 - [ ] Adversários no calendário: gerar fixture completa ao iniciar temporada
-- [ ] **Mercado sem jogadores à venda/empréstimo** — `selectClub` limpa as listagens
-  (`useTransferStore.clearAll`, R-07, para não vazar da carreira anterior), mas **nada
-  gera listagens novas**: os únicos dados eram os demo do Palmeiras. Falta os bots
-  colocarem jogadores à venda/empréstimo ao longo da temporada, senão os filtros
-  "À venda"/"Empréstimo" ficam vazios a carreira inteira. (Relatado: rodada 12, nada listado.)
+- [x] **Mercado sem jogadores à venda/empréstimo** — ✅ **CONCLUÍDO** (14/07): novo
+  `marketListingEngine` faz os bots listarem 3 à venda + 2 por empréstimo cada
+  (60/40 globais), com rotatividade por rodada e re-sorteio na virada. Seleção por
+  rank top-N torna o "nunca vazio" uma invariante estrutural. Corrigido junto um bug
+  de reatividade: o `TransferMarket` assinava `s.isForSale` (seletor de FUNÇÃO, ref
+  estável) e nunca re-renderizava com listagem nova.
+
+- [ ] ⚠️ **#38 — Rebalancear bilheteria × folha salarial** (achado ao verificar #30/#31;
+  **os dois fluxos FUNCIONAM** — o problema é de balanceamento, não de execução).
+  Medido no browser (SPFC, T1): em 4 rodadas a bilheteria somou **R$ 12,46M** contra
+  **R$ 2,36M** de folha, e o caixa foi de R$ 9,5M → R$ 16,8M. Projeção da temporada:
+  ~R$ 102M de bilheteria contra ~R$ 21M de folha (**4,8×**), fechando a T1 com ~9,5× o
+  orçamento inicial. Consequências: (a) o desconto de salário é **economicamente
+  irrelevante** — é isto, mais que a falta de UI, que tornava o efeito "invisível";
+  (b) o `onFinanceCheck` usa `budget/initialBudget` e a partir da rodada ~4 o ratio já
+  é ~2, então os branches de punição da diretoria (`<= 0.15` / `<= 0.30`) viram
+  **código morto**; (c) o gate de orçamento do `checkTransferEligibility` vira no-op a
+  partir da rodada ~6. Alavancas sugeridas (aditivas): mando dividido (visitante leva
+  10%), custo operacional por jogo em casa (~15%, categoria nova), impostos (~12%) —
+  isso corta ~35% e ainda sobra fator ~3; o resto tem que vir de preço base ou
+  ocupação base. Nota honesta: parte do desequilíbrio é o **elenco de 16** (real tem
+  25-30), não só a bilheteria alta. **⚠ Fórmula de engine: exige teste de mesa.**
+- [ ] ⚠️ **#39 — Elasticidade preço × público (exploit)** — `calcTicketRevenue`
+  (`stadiums.ts`) calcula a ocupação SÓ pela importância do jogo e aplica os
+  `customPrices` depois: **subir o preço não reduz o público**. Com os sliders no
+  máximo a temporada vai de ~R$ 102M para ~R$ 320M (**3,14×**) com público
+  **idêntico** — estratégia dominante e sem downside. Proposta: fator multiplicativo
+  `clamp(1 - k*(preço/preçoBase - 1), 0.35, 1.15)` com k≈0.45 por setor, aplicado
+  antes do `Math.min(1.0, ...)`. Com k=0.45, dobrar o preço tira ~45% do público →
+  receita quase neutra e o ótimo fica perto do preço base. **⚠ Exige teste de mesa.**
+- [ ] **#40 — Premiação por posição/título** — a categoria `'premio'` existe no
+  `useFinanceStore` e tem ícone 🏆, mas o grep confirma que `addIncome` só é chamado
+  em UM lugar do código (bilheteria): **premiação nunca existiu**. Sem ela o extrato
+  nasce com receita de item único. Sugestão escalonada pela posição no Brasileirão
+  (campeão R$ 45M · 2º-4º R$ 25M · 5º-8º R$ 12M · 9º-16º R$ 6M · Z-4 R$ 2M), lançada
+  no `closeSeasonEnd` antes do `set({season: nextSeason})`. **Atenção: isto PIORA o
+  #38** — tratar os dois juntos, não isoladamente.
 
 ### Médio Prazo
 - [x] `MY_CLUB_FORCE` derivado do elenco real em TransferMarket — ✅ **CONCLUÍDO** (`efe63db`):
@@ -1061,12 +1093,26 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
   (`Scoreboard`, hoje `Shirt` + nome) e o **topo da sidebar do hub** (`IconSidebar` em
   `ManagerHub`, linha ~240, hoje `Shirt colors=myClub.colors`). Conferir também
   `CoachesView` (usa `Shirt` na lista) — avaliar se troca lá também.
-- [ ] **Verificar + expor o fluxo financeiro** — a receita de bilheteria já é somada
-  no `nextRound` (`addIncome`, só jogos em casa) e a folha salarial já é descontada a
-  cada 4 rodadas (`deductWages`). Falta: (a) confirmar os valores (bilheteria por jogo
-  em casa, folha mensal correta) e (b) uma **tela de extrato/finanças** listando
-  receitas (bilheteria, prêmios) e despesas (salários, transferências, obras) por
-  rodada, para o jogador acompanhar o orçamento — hoje o efeito é invisível.
+- [x] **Verificar + expor o fluxo financeiro** — ✅ **CONCLUÍDO** (14/07).
+  **(a) Verificação:** os dois fluxos **FUNCIONAM** — a suspeita de que estivessem
+  quebrados foi refutada. Medido no browser (SPFC, T1): bilheteria lançada só em jogo
+  em casa (`R4 +R$ 6,43M — SPFC 0×0 SAN`) e folha descontada a cada 4 rodadas
+  (`R4 −R$ 2,36M — Folha salarial mês 1`), valor que bate com a soma de `calcSalary`
+  dos 16 atletas. Reconciliação conferida: `9,5M inicial + 12,46M receitas −
+  5,18M despesas = 16,78M` = saldo real.
+  **(b) Exposição:** nova tela **`FinanceView`** (Extrato Financeiro, ícone 💰,
+  atalho F7): saldo, receitas/despesas/resultado da temporada, barras por categoria,
+  seletor de temporada, chips de filtro e a tabela por rodada (Rodada · Categoria ·
+  Descrição · Valor · Saldo).
+  **Fixes de dados junto:** `addExpense` não clampa mais o saldo em zero (o
+  `Math.max(0, …)` zerava o saldo mas registrava o valor cheio — o extrato não fechava
+  e a folha saía de graça para quem estava quebrado; dívida agora é um estado
+  legítimo); teto do histórico 200 → 2000 (200 engolia a T1 antes do fim); `CAT_LABEL`
+  virou fonte única no `useFinanceStore` (o `StadiumView` tinha uma cópia local sem a
+  categoria `luva`, que apareceria com ícone genérico).
+  **O que a verificação REVELOU** (itens #38/#39/#40 na Alta Prioridade): o efeito era
+  invisível não só por falta de UI — a bilheteria é ~4,8× a folha, o que torna o
+  salário economicamente irrelevante.
 - [ ] **Tela de Tabelas com todas as competições** — hoje `StandingsScreen` é fixa no
   Brasileirão (`<Standings />`). Adicionar um seletor das competições do clube
   (`CLUB_COMPETITIONS`/`clubCalendar`: estaduais, Copa do Brasil, Libertadores/Sula,

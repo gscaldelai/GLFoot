@@ -4,7 +4,7 @@
 // ════════════════════════════════════════════════════════
 import { useState } from 'react'
 import { useMatchStore }   from '@/stores/useMatchStore'
-import { useFinanceStore } from '@/stores/useFinanceStore'
+import { useFinanceStore, CAT_LABEL } from '@/stores/useFinanceStore'
 import { useStadiumStore } from '@/stores/useStadiumStore'
 import { CLUBS } from '@/data/clubs'
 import {
@@ -540,15 +540,6 @@ function FinanceLedger() {
     )
   }
 
-  const CAT_LABEL: Record<string, string> = {
-    bilheteria:   '🎟',
-    salarios:     '💼',
-    transferencia:'🔁',
-    expansao:     '🏗',
-    premio:       '🏆',
-    outro:        '💰',
-  }
-
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <div className="px-4 pt-3 pb-[5px]">
@@ -557,7 +548,7 @@ function FinanceLedger() {
       <div className="flex-1 overflow-y-auto px-3 pb-2">
         {last.map(tx => (
           <div key={tx.id} className="flex items-start gap-2 py-[5px] border-b border-border/40">
-            <span className="text-[13px] mt-[1px]">{CAT_LABEL[tx.category] ?? '💰'}</span>
+            <span className="text-[13px] mt-[1px]">{CAT_LABEL[tx.category]?.icon ?? '💰'}</span>
             <div className="flex-1 min-w-0">
               <div className="text-[10px] text-white/70 truncate leading-tight">{tx.description}</div>
               <div className="text-[9px] text-[#4a6070]">R{tx.round} · T{tx.season}</div>
