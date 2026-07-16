@@ -2,7 +2,7 @@
 //  GLfoot — Mercado
 //  Árvore de ligas + tabela de jogadores + filtros inline
 // ════════════════════════════════════════════════════════
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { CLUBS } from '@/data/clubs'
 import { CLUB_TROPHIES } from '@/data/trophies'
 import {
@@ -82,15 +82,27 @@ export default function TransferMarket() {
   const executeTransfer  = useMatchStore(s => s.executeTransfer)
   const fixtures         = useMatchStore(s => s.fixtures)
   const round            = useMatchStore(s => s.round)
+  const season           = useMatchStore(s => s.season)
   const loansThisSeason  = useMatchStore(s => s.loansThisSeason)
   const budget           = useFinanceStore(s => s.budget)
   const toggleSale       = useTransferStore(s => s.toggleSale)
   const toggleLoan       = useTransferStore(s => s.toggleLoan)
-  const isForSale        = useTransferStore(s => s.isForSale)
-  const isForLoan        = useTransferStore(s => s.isForLoan)
+  // Assinar `listings` (dados), não `isForSale` (função): o seletor de função
+  // devolve referência estável, o Object.is dá igual e o componente NUNCA
+  // re-renderiza quando uma listagem muda.
+  const listings         = useTransferStore(s => s.listings)
+  const isForSale = (c: string, n: number) => listings[`${c}_${n}`]?.forSale ?? false
+  const isForLoan = (c: string, n: number) => listings[`${c}_${n}`]?.forLoan ?? false
 
   const [transferMsg, setTransferMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+
+  // Backfill (#32): carreira salva antes do mercado existir tem listings vazio,
+  // e o seed só roda em selectClub — que ela nunca mais vai chamar. Sem isto o
+  // save em andamento continuaria com o mercado vazio para sempre. Idempotente.
+  useEffect(() => {
+    useTransferStore.getState().ensureMarket(round, season, myClubId)
+  }, [round, season, myClubId])
 
   // ── Estado de navegação ──────────────────────────────
   const [selectedClubId, setSelectedClubId] = useState<string | null>(myClubId)

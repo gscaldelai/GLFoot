@@ -375,6 +375,9 @@ export const useMatchStore = create<MatchStore>()(
     useLineupStore.setState({ slots: [], bench: [], selected: null, dragSrc: null })
     // Listagens de venda/empréstimo da carreira anterior não vazam (R-07)
     useTransferStore.getState().clearAll()
+    // ...e o mercado da NOVA carreira nasce povoado (#32): sem isto os filtros
+    // "À venda"/"Empréstimo" ficavam vazios a carreira inteira
+    useTransferStore.getState().seedMarket(1, clubId)
 
     const clubCalendar = buildClubCalendar(clubId)
 
@@ -822,6 +825,10 @@ export const useMatchStore = create<MatchStore>()(
       }),
     })
 
+    // ── Rotatividade do mercado (#32) ─────────────────────────────────────
+    // Protegido pela guarda de idempotência do topo do nextRound: 1× por rodada
+    useTransferStore.getState().tickMarket(s.round + 1, s.season, s.myClubId)
+
     // ── Lesionado sai do XI automaticamente (J-01) ────────────────────────
     // O JOGAR fica bloqueado enquanto houver titular lesionado (ManagerHub), e a
     // recuperação só roda aqui no nextRound — que exige jogar. Sem tirar o lesionado
@@ -930,6 +937,8 @@ export const useMatchStore = create<MatchStore>()(
       // Técnicos NPC: zera hiredRound/pressure (R-06 — senão contratado no
       // fim da temporada fica imune a demissão na seguinte)
       useCoachStore.getState().onSeasonTurnover()
+      // Mercado da nova temporada: re-sorteio completo (#32)
+      useTransferStore.getState().seedMarket(nextSeason, s.myClubId)
       // Reconstrói calendário e reseta status das copas para nova temporada
       const newCalendar = s.myClubId ? buildClubCalendar(s.myClubId) : s.clubCalendar
       const newCupStatus: Record<string, 'active' | 'eliminated'> = {}
@@ -977,6 +986,8 @@ export const useMatchStore = create<MatchStore>()(
     // Comprados para o clube anterior voltam ao mercado (R-09) — o elenco
     // antigo reverte ao JSON, então mantê-los em acquiredPlayers só os
     // sumiria do jogo pelo resto da carreira
+    // Mercado re-sorteado: o clube antigo volta a listar, o novo sai (#32)
+    useTransferStore.getState().seedMarket(get().season, clubId)
     set({ myClubId: clubId, contractGoal, initialBudget, clubCalendar, cupStatus,
           acquiredPlayers: [], loansThisSeason: 0, screen: 'hub' })
   },
@@ -1039,6 +1050,8 @@ export const useMatchStore = create<MatchStore>()(
       player, fromClubId, type, round: s.round, season: s.season,
       passe: type === 'buy' ? passe : 0, salary: sal, luva,
     }
+    // Contratado sai do mercado (#32)
+    useTransferStore.getState().unlist(fromClubId, player.num)
     set({
       acquiredPlayers: [...s.acquiredPlayers, entry],
       loansThisSeason: type === 'loan' ? s.loansThisSeason + 1 : s.loansThisSeason,
