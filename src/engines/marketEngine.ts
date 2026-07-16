@@ -78,6 +78,88 @@ export function calcSquadValue(players: Player[]): number {
   return players.reduce((sum, p) => sum + calcMarketValue(p), 0)
 }
 
+// ── Luva de empréstimo ───────────────────────────────────
+// Paga ao ATLETA para convencê-lo a descer de nível. É um SINK: o dinheiro
+// some — não vai para o clube cedente nem para lugar nenhum.
+//
+// Objetivo: dificultar que um clube pequeno acumule atletas muito acima do seu
+// nível pagando pouco. O motor é o EXCEDENTE (quanto o atleta supera a média do
+// elenco do comprador), em curva acelerada.
+//
+//   cross-division (comprador de divisão INFERIOR):  K       × forca × (1+exc/10)² × gap
+//   mesma divisão (gap 0), só se exc >= 8:           K_intra × forca × (exc/10)²
+//   inferior → superior (clube grande pega de série menor): sem luva
+//
+// A ausência do "+1" no ramo intra é proposital: reforço "no seu nível" sai de
+// graça; só encarece quem puxa alguém bem acima da própria média.
+export const LUVA_K       = 10_000   // cross-division
+export const LUVA_K_INTRA = 4_000    // mesma divisão (mais suave)
+export const LUVA_EXC_MIN = 8        // excedente mínimo p/ cobrar luva intra
+
+export type LuvaKind = 'none' | 'intra' | 'cross'
+
+export interface LuvaResult {
+  luva:      number
+  excedente: number
+  gap:       number
+  kind:      LuvaKind
+}
+
+export function calcLuva(
+  forca:        number,
+  myClubForce:  number,
+  buyerDivision:  number,
+  sellerDivision: number,
+): LuvaResult {
+  const excedente = Math.max(0, forca - myClubForce)
+  const gap       = buyerDivision - sellerDivision   // >0 = comprador é de divisão inferior
+  const round10k  = (v: number) => Math.round(v / 10_000) * 10_000
+
+  if (gap > 0) {
+    const luva = round10k(LUVA_K * forca * Math.pow(1 + excedente / 10, 2) * gap)
+    return { luva, excedente, gap, kind: 'cross' }
+  }
+  if (gap === 0 && excedente >= LUVA_EXC_MIN) {
+    const luva = round10k(LUVA_K_INTRA * forca * Math.pow(excedente / 10, 2))
+    return { luva, excedente, gap, kind: 'intra' }
+  }
+  return { luva: 0, excedente, gap, kind: 'none' }
+}
+
+// ── Custo total de um empréstimo ─────────────────────────
+// FONTE ÚNICA DE VERDADE: a UI (para exibir antes de confirmar) e o store (para
+// cobrar) chamam esta mesma função. A divergência entre as duas era exatamente
+// o que fazia o jogador clicar sem saber quanto ia pagar.
+export const LOAN_SALARY_MONTHS = 6   // sinal adiantado, em meses de salário
+
+export interface LoanCost {
+  signing: number   // sinal adiantado (6 meses de salário) — despesa, não volta
+  salary:  number   // salário mensal, cobrado enquanto durar o empréstimo
+  luva:    number
+  total:   number   // o que sai do caixa AGORA
+  kind:    LuvaKind
+  excedente: number
+}
+
+export function calcLoanCost(
+  player:         Player,
+  myClubForce:    number,
+  buyerDivision:  number,
+  sellerDivision: number,
+): LoanCost {
+  const salary  = calcSalary(player)
+  const signing = salary * LOAN_SALARY_MONTHS
+  const l       = calcLuva(player.forca, myClubForce, buyerDivision, sellerDivision)
+  return {
+    signing,
+    salary,
+    luva:      l.luva,
+    total:     signing + l.luva,
+    kind:      l.kind,
+    excedente: l.excedente,
+  }
+}
+
 // ── Algoritmo Estrela da Temporada ───────────────────────
 // Roda ao fim de cada temporada, por liga.
 // O jogador com maior pontuação recebe isStar = true (dura 1 temporada).
@@ -118,45 +200,86 @@ export interface EligibilityResult {
   reason?: string   // mensagem exibida na UI quando bloqueado
 }
 
+export const MAX_LOANS_PER_SEASON = 3
+
+export interface EligibilityOpts {
+  player:          Player
+  sellerClubForce: number   // força média do elenco vendedor
+  buyerClubForce:  number   // força média do elenco comprador (elenco VIVO)
+  buyerBudget:     number
+  type:            TransferType
+  buyerDivision:   number
+  sellerDivision:  number
+  loansThisSeason: number
+  fromClubId:      string
+  /** Adversário do clube do jogador na rodada atual — sem negócios entre eles */
+  blockedClubId:   string | null
+}
+
 /**
  * Verifica se uma transferência é permitida pelas regras do jogo.
  *
- * Regras:
- *  - Compra:    força do comprador ≥ força do vendedor − 10
- *  - Empréstimo: força do comprador ≥ força do vendedor − 25
- *  - Orçamento: comprador precisa ter passe + 6× salário disponível
+ * Compra:
+ *  - força do comprador ≥ força do vendedor − 10
+ *  - saldo ≥ passe + 6× salário
+ *
+ * Empréstimo:
+ *  - SEM gate de força: quem freia é a luva (encarecer, não proibir)
+ *  - máx. 3 por temporada
+ *  - saldo ≥ sinal (6× salário) + luva
+ *
+ * Ambos: nada de negócios com o adversário da rodada.
  */
-export function checkTransferEligibility(
-  player:          Player,
-  sellerClubForce: number,   // força média do elenco vendedor
-  buyerClubForce:  number,   // força média do elenco comprador
-  buyerBudget:     number,   // orçamento disponível do comprador
-  type:            TransferType,
-): EligibilityResult {
-  const gap         = type === 'buy' ? 10 : 25
-  const minForce    = sellerClubForce - gap
+export function checkTransferEligibility(o: EligibilityOpts): EligibilityResult {
+  const { player, type, buyerBudget } = o
 
-  // Regra 1 — força do clube comprador
-  if (buyerClubForce < minForce) {
-    const diff = Math.ceil(minForce - buyerClubForce)
+  // Regra 0 — anti-exploit: não se negocia com quem se enfrenta nesta rodada
+  if (o.blockedClubId && o.fromClubId === o.blockedClubId) {
     return {
       allowed: false,
-      reason: type === 'buy'
-        ? `Clube muito fraco para esta compra. Precisa de mais ${diff} pontos de força.`
-        : `Diferença de força muito grande para empréstimo (máx. 25 pts).`,
+      reason: 'Vocês se enfrentam nesta rodada — sem negócios entre os dois clubes.',
     }
   }
 
-  // Regra 2 — orçamento (apenas compra)
-  if (type === 'buy') {
-    const passe   = calcPasse(player)
-    const reserve = calcSalary(player) * 6
-    const needed  = passe + reserve
-    if (buyerBudget < needed) {
+  if (type === 'loan') {
+    // Regra 1 — limite por temporada
+    if (o.loansThisSeason >= MAX_LOANS_PER_SEASON) {
       return {
         allowed: false,
-        reason: `Saldo insuficiente. Necessário: R$ ${fmtValue(needed)} (passe + 6 meses de salário).`,
+        reason: `Limite de ${MAX_LOANS_PER_SEASON} empréstimos por temporada atingido. Zera na próxima temporada.`,
       }
+    }
+    // Regra 2 — saldo (sinal + luva). NÃO há gate de força: a luva é o freio.
+    const cost = calcLoanCost(player, o.buyerClubForce, o.buyerDivision, o.sellerDivision)
+    if (buyerBudget < cost.total) {
+      const detalhe = cost.luva > 0
+        ? `sinal R$ ${fmtValue(cost.signing)} + luva R$ ${fmtValue(cost.luva)}`
+        : `sinal de 6 meses de salário`
+      return {
+        allowed: false,
+        reason: `Saldo insuficiente. Necessário: R$ ${fmtValue(cost.total)} (${detalhe}).`,
+      }
+    }
+    return { allowed: true }
+  }
+
+  // ── Compra ────────────────────────────────────────────
+  const minForce = o.sellerClubForce - 10
+  if (o.buyerClubForce < minForce) {
+    const diff = Math.ceil(minForce - o.buyerClubForce)
+    return {
+      allowed: false,
+      reason: `Clube muito fraco para esta compra. Precisa de mais ${diff} pontos de força.`,
+    }
+  }
+
+  const passe   = calcPasse(player)
+  const reserve = calcSalary(player) * 6
+  const needed  = passe + reserve
+  if (buyerBudget < needed) {
+    return {
+      allowed: false,
+      reason: `Saldo insuficiente. Necessário: R$ ${fmtValue(needed)} (passe + 6 meses de salário).`,
     }
   }
 

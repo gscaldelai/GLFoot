@@ -168,7 +168,7 @@ glfoot/
     │   ├── competitions.ts    ← catálogo de competições e fases
     │   ├── formations.ts      ← formações disponíveis (4-4-2, 4-3-3, etc.)
     │   ├── trophies.ts        ← histórico de títulos dos 20 clubes
-    │   ├── clubStrength.ts    ← força média e tier por clube
+    │   ├── clubStrength.ts    ← força do clube (média dos atletas) + faixas e rótulos
     │   └── clubGoals.ts       ← metas contratuais e orçamento inicial
     │
     ├── pages/
@@ -374,7 +374,7 @@ Calibrado: ~3.7 demissões de bots/temporada; bônus λ máximo ±0.05 mantém a
 de gols em 2.5–3.0 (`scripts/test-coach.js`).
 
 ```typescript
-generateInitialCoaches(playerClubId) // 19 técnicos (reputação por tier) + 6 no mercado livre
+generateInitialCoaches(playerClubId) // 19 técnicos (reputação pela força do clube) + 6 no mercado livre
 processCoachRound(coaches, standings, round, season, playerClubId)
 // pressão: 6+ posições abaixo do esperado → 5 rodadas seguidas = demissão
 // (proteção: 5 rodadas no cargo; liga só demite a partir da rodada 6)
@@ -382,8 +382,8 @@ processCoachRound(coaches, standings, round, season, playerClubId)
 // nunca há Coach com o clubId do jogador, a liga contratava um NPC para ele (R-18)
 coachLambdaBonus(reputation)         // (rep − 3) × 0.025 → 5★ +0.05 · 1★ −0.05
 calcPlayerReputation(seasons)        // 1–5★: base 2 · título +1 · G4 +0.5 · Z4 −0.5
-buildPlayerOffers(rep, excludeClub)  // até 3 clubes com tier compatível
-MIN_REPUTATION_BY_TIER               // S:4★ · A:3★ · B:2★ · C:1★
+buildPlayerOffers(rep, excludeClub)  // até 3 clubes cuja força aceite a reputação
+minReputationForForce(force)         // ≥75: 4★ · ≥68.5: 3★ · ≥61: 2★ · <61: 1★
 ```
 
 **Bônus de λ**: aplicado nos três lugares — partida do jogador (`prepareMatch`, usando
@@ -625,16 +625,41 @@ Dois clubes completos:
 
 ### 8.3 Força dos Clubes (`clubStrength.ts`)
 
+**Não existe mais sistema de Tiers (S/A/B/C).** A força de um clube é a **média dos
+atletas** (elenco + banco) — é ela que baliza metas contratuais, orçamento, convites a
+técnicos, transferências e empréstimos.
+
 ```typescript
 interface ClubStrengthEntry {
-  id:         string
-  forcaMedia: number   // 40–80
-  tier:       'S' | 'A' | 'B' | 'C'
-  division:   1 | 2 | 3
+  id:       string     // só identidade — a força vem do elenco
+  name:     string
+  division: 1 | 2 | 3
 }
+
+clubForce(id, override?)   // = avgSquad([...squad, ...bench]); fallback 60 se id desconhecido
+forceBand(force)           // 'S' | 'A' | 'B' | 'C' — INTERNO, a letra nunca vai à UI
+forceLabel(force)          // 'Elite Nacional' | 'Grande Clube' | 'Clube Médio' | 'Clube Pequeno'
+isAvailableOnFree(id)      // clubForce(id) < FORCE_BANDS.A — SEMPRE sem override
 ```
 
-Tiers: **S** 75+ · **A** 68–74 · **B** 58–67 · **C** <58
+O `override` é o **elenco vivo** do clube do jogador (`useLineupStore`: slots + bench) —
+é o que torna a força dinâmica com transferências, lesões e envelhecimento. Os 19 bots
+não têm elenco vivo: a força deles sai do JSON (`clubForce` sem override).
+
+**Base de cálculo = elenco + banco**, nunca só o XI — senão o técnico mexeria no próprio
+gating apenas reordenando a escalação. (O λ do `matchEngine` continua usando `avgSquad`
+do XI: força **em campo** e força **institucional** são medidas diferentes de propósito.)
+
+Faixas (`FORCE_BANDS`, implementação interna): **S** ≥75 · **A** ≥68.5 · **B** ≥61 · **C** <61.
+Limiares validados em `scripts/test-force-bands.js` (plugado no `npm run test:engine`):
+reproduzem 20/20 os tiers que existiam antes.
+
+| Faixa | Força | Rótulo na UI | Clubes |
+|---|---|---|---|
+| S | ≥ 75 | Elite Nacional | Flamengo 77.6 · Atlético-MG 76.0 |
+| A | ≥ 68.5 | Grande Clube | Palmeiras 73.4 · Botafogo 72.3 · SPFC 71.8 · Internacional 71.4 · Cruzeiro 70.9 · Corinthians 70.2 · Grêmio 69.6 |
+| B | ≥ 61 | Clube Médio | Athletico-PR 67.4 · Fortaleza 67.0 · Bragantino 66.6 · Vasco 65.6 · Santos 64.8 · Bahia 64.5 |
+| C | < 61 | Clube Pequeno | Goiás 57.7 · América-MG 54.9 · Ceará 54.7 · Sport 53.6 · CSA 51.8 |
 
 ### 8.4 Metas e Orçamento (`clubGoals.ts`)
 
@@ -647,18 +672,22 @@ interface ContractGoal {
   secondaryLabel: string
 }
 
+getContractGoal(forca)   // 1 parâmetro: a faixa sai de forceBand (fonte única)
+
 // Orçamento inicial por força:
 // budget = 10_000_000 × (forcaMedia / 75)^2.5
 // Arredondado a R$500k | Min R$500k | Max R$15M
 ```
 
-| Tier | Força | Orçamento inicial |
-|---|---|---|
-| S (Elite) | 78 | ~R$12M |
-| A (Grande) | 73 | ~R$9.5M |
-| B (Médio) | 63 | ~R$5.5M |
-| C (Pequeno) | 52 | ~R$3M |
-| D (Acesso) | 43 | ~R$1.5M |
+Meta e orçamento saem os dois da **força** (`GOALS_BY_BAND` indexado por `forceBand`).
+Não há faixa 'D': nenhum clube cai nela.
+
+| Faixa | Força | Meta primária | Orçamento inicial |
+|---|---|---|---|
+| S (Elite Nacional) | ≥ 75 | Ser Campeão Brasileiro | R$10M–11M |
+| A (Grande Clube) | ≥ 68.5 | Terminar entre os 4 primeiros | R$8.5M–9.5M |
+| B (Clube Médio) | ≥ 61 | Terminar entre os 8 primeiros | R$7M–7.5M |
+| C (Clube Pequeno) | < 61 | Não ser rebaixado | R$4M–5M |
 
 ---
 
@@ -669,13 +698,14 @@ Login e registro via API Railway. Em desenvolvimento local: auth mockado via `lo
 
 ### ClubSelect
 Tela de nova carreira em duas colunas:
-- **Esquerda:** Ligas nacionais (checkbox) · Competições regionais (tags) · **Proposta de Contrato** (mostra tier, meta, orçamento, confiança inicial)
+- **Esquerda:** Ligas nacionais (checkbox) · Competições regionais (tags) · **Proposta de Contrato** (mostra rótulo + força, meta, orçamento, confiança inicial)
 - **Direita:** Seleção nacional · Escolher clube · Dados do técnico · Botão Iniciar
 
 **Nenhum clube vem pré-selecionado** (`selectedId` inicia vazio): a coluna esquerda
 mostra um placeholder ("Escolha um clube…") e o botão Iniciar fica desabilitado até o
 técnico escolher um clube (ou marcar o sorteio). Só então a Proposta de Contrato aparece,
-para o clube escolhido. O dropdown filtra pelo plano (Free = tier B/C; Premium = todos).
+para o clube escolhido. O badge do clube mostra rótulo + força ("Grande Clube · 71.8").
+O dropdown filtra pelo plano (Free = força < 68.5; Premium = todos).
 
 ### ManagerHub
 Hub principal com sidebar de 48px e área de conteúdo. Atalhos: F4 Jogos · F5 Tabelas · F6 Estádios · F8 Mercado.
@@ -893,8 +923,8 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
 |---|---|---|
 | Velocidade 1× | ✅ | ✅ |
 | Velocidade 1.5× e 2× | 🔒 | ✅ |
-| Clubes tier B/C (médios e pequenos: Santos, Vasco, Fortaleza, Goiás…) | ✅ | ✅ |
-| Clubes tier S/A (grandes: Flamengo, Palmeiras, SPFC, Corinthians…) | 🔒 | ✅ |
+| Clubes com força < 68.5 (médios e pequenos: Santos, Vasco, Fortaleza, Goiás… — 11 clubes) | ✅ | ✅ |
+| Clubes com força ≥ 68.5 (grandes: Flamengo, Palmeiras, SPFC, Corinthians… — 9 clubes) | 🔒 | ✅ |
 | Central de Empregos | 🔒 | ✅ |
 | Seleção Nacional | 🔒 | ✅ (TODO) |
 | Ver pênaltis | ✅ | ✅ |
@@ -962,7 +992,9 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
   "À venda"/"Empréstimo" ficam vazios a carreira inteira. (Relatado: rodada 12, nada listado.)
 
 ### Médio Prazo
-- [ ] `MY_CLUB_FORCE` derivado do elenco real em TransferMarket
+- [x] `MY_CLUB_FORCE` derivado do elenco real em TransferMarket — ✅ **CONCLUÍDO** (`efe63db`):
+  `clubForce(myClubId, myRoster)`. Antes saía do JSON estático, então comprar um craque não
+  mexia na própria força — que é justamente o balizador das transferências.
 - [ ] Confiança da Torcida: eliminação precoce de copa → penalidade
 - [ ] Sistema de negociação: fazer oferta → resposta do clube (aceitar/recusar/contraproposta)
 - [ ] **Reformular sistema de EMPRÉSTIMOS** (custo + limite + regra de divisão + luva).
@@ -1042,18 +1074,30 @@ Integração planejada para o projeto ViajandoDeVerdade (outro projeto). Não ut
   (Mata-Mata). Deve ser possível ver **qualquer** competição mesmo já eliminado
   (`cupStatus` só marca ativo/eliminado — falta guardar o chaveamento/resultados das
   copas para exibir).
-- [ ] **Remover o sistema de Tiers (S/A/B/C)** — a força do clube deve ser a **média
-  dos atletas** (dinâmica, muda com transferências/envelhecimento), e ela é o único
-  balizador para convites a técnicos, transferências e empréstimos. Hoje o tier é usado
-  em 9 arquivos: `clubStrength.ts` (define `tier` + `forcaMedia` hardcoded → virar força
-  média do elenco), `coachEngine.ts` (`MIN_REPUTATION_BY_TIER` → limiar por força),
-  `clubGoals.ts` (`getContractGoal(tier, …)` → por força), `ClubSelect.tsx`
-  (`isAvailableOnFree` hoje por tier B/C + `TIER_LABEL` → por faixa de força),
-  `CoachesView.tsx` (coluna/label de tier), `useMatchStore.ts` (reputação/meta via tier).
-  Stadiums (`stadiums.ts`/`useStadiumStore.ts`/`StadiumView.tsx`) usam `forcaMedia`, não
-  tier — só garantir que a força continue disponível. **⚠ Ao implementar, testar:**
-  teste de mesa do coach (`npm run test:engine`/`test-coach.js`), gating Free/Premium,
-  transferências, empréstimos e convites a técnicos no browser.
+- [x] **Remover o sistema de Tiers (S/A/B/C)** — ✅ **CONCLUÍDO** (commit `efe63db`). A força
+  do clube agora é a **média dos atletas** (elenco + banco) e é o único balizador de metas,
+  orçamento, convites a técnicos, transferências e empréstimos. `ClubStrengthEntry` perdeu
+  `tier` e `forcaMedia` (só `id`/`name`/`division`); `clubForce(id, override?)` calcula a
+  força; `FORCE_BANDS` (75 / 68.5 / 61) + `forceBand()` ficaram como implementação interna
+  e `forceLabel()` dá o rótulo que o jogador lê. `MIN_REPUTATION_BY_TIER` →
+  `minReputationForForce(force)`; `GOALS_BY_TIER` → `GOALS_BY_BAND` com
+  `getContractGoal(forca)` de 1 parâmetro; `TIER_FORCE_ESTIMATE` (código morto) e a faixa
+  'D' (vazia) foram deletados. `scripts/test-force-bands.js` prova 20/20 que as faixas
+  reproduzem os tiers antigos. **Escopo entregue:** força viva só para o **clube do
+  jogador** (via `override` = elenco do `useLineupStore`) — os 19 bots seguem o elenco do
+  JSON. Persistir os 20 elencos ficou como backlog novo (item abaixo).
+- [ ] **Elencos dos bots dinâmicos (persistir os 20 elencos no save)** — hoje só o clube do
+  jogador tem elenco vivo. Comprar um craque do Santos **fortalece o meu clube mas não
+  enfraquece o Santos**: o elenco do bot reverte ao JSON, então a força dele (e a meta, a
+  reputação mínima do técnico, a posição esperada na tabela) fica congelada como se o atleta
+  nunca tivesse saído. O mesmo vale para envelhecimento e lesões dos bots. **Ponto de
+  extensão já pronto:** `clubForce(id, override?)` — basta o save guardar o elenco de cada
+  clube e passar como `override`; as faixas, metas e o gating saem de graça. ⚠ `isAvailableOnFree`
+  deve continuar **sem override** (o gating Free/Premium não pode oscilar com transferências).
+  **Colide com** o item "Mercado sem jogadores à venda/empréstimo" (Alta Prioridade): quando os
+  bots gerarem listagens, os dois passam a mexer no mesmo elenco — decidir a ordem e o dono do
+  estado. **Custo:** multiplica o save por ~20 (hoje só 1 elenco) — avaliar formato
+  (delta contra o JSON em vez de elenco inteiro?) antes de implementar.
 
 ### Longo Prazo
 - [ ] Logos reais dos 20 clubes em `/public/assets/crests/{short}.png`

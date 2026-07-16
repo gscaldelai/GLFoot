@@ -33,10 +33,10 @@ import { useTransferStore }    from './useTransferStore'
 import { useFinanceStore }     from './useFinanceStore'
 import { useStadiumStore }     from './useStadiumStore'
 import { useConfidenceStore }             from './useConfidenceStore'
-import { clubForce }                     from '@/data/clubStrength'
+import { clubForce, getClubStrength }    from '@/data/clubStrength'
 import { getContractGoal, calcInitialBudget } from '@/data/clubGoals'
 import { getFormationBonus, pickBotFormation, FORMATIONS, slotToMatchPos, assignToFormation, type FormationKey } from '@/data/formations'
-import { generateFixtures, type FixtureGame } from '@/engines/fixtureEngine'
+import { generateFixtures, getClubFixture, type FixtureGame } from '@/engines/fixtureEngine'
 import { avgSquad } from '@/engines/matchEngine'
 import { buildClubCalendar, type CalendarGame, CUP_PRESTIGE } from '@/engines/calendarEngine'
 import { COMPETITION_CATALOG } from '@/data/competitions'
@@ -89,6 +89,28 @@ function liveRoster(): Player[] {
   return [...(ls.slots.filter(Boolean) as Player[]), ...ls.bench]
 }
 
+/** Divisão do clube (1 = Série A). Hoje todos os 20 clubes são divisão 1. */
+export function divisionOf(clubId: string): number {
+  return getClubStrength(clubId)?.division ?? 1
+}
+
+/**
+ * Adversário do clube do jogador na rodada atual (#37 — trava anti-exploit).
+ * Escopo: Brasileirão. Jogos de copa não têm adversário no modelo de dados
+ * (CalendarGame não guarda clube; a simulação é probabilística), então a trava
+ * não os cobre — limitação documentada.
+ */
+export function myOpponentThisRound(
+  fixtures: FixtureGame[],
+  myClubId: string | null,
+  round: number,
+): string | null {
+  if (!myClubId) return null
+  const fix = getClubFixture(fixtures, myClubId, round)
+  if (!fix) return null
+  return fix.homeId === myClubId ? fix.awayId : fix.homeId
+}
+
 // Escolhe o melhor reserva elegível para substituir um lesionado (bots)
 function pickBotReplacement(bench: Player[], out: Player): number {
   let bestIdx = -1, bestScore = -Infinity
@@ -101,7 +123,7 @@ function pickBotReplacement(bench: Player[], out: Player): number {
 }
 
 import type { ContractGoal } from '@/data/clubGoals'
-import { calcPasse, calcSalary } from '@/engines/marketEngine'
+import { calcPasse, calcSalary, calcLoanCost, MAX_LOANS_PER_SEASON } from '@/engines/marketEngine'
 
 export interface AcquiredPlayer {
   player:     Player
@@ -111,6 +133,7 @@ export interface AcquiredPlayer {
   season:     number
   passe:      number   // valor pago pelo passe (0 em empréstimo)
   salary:     number   // salário mensal acordado
+  luva?:      number   // luva paga ao atleta no empréstimo (sink) — 0/undefined se não houve
 }
 
 interface MatchStore {
@@ -127,6 +150,7 @@ interface MatchStore {
   initialBudget:    number
   fixtures:         FixtureGame[]
   acquiredPlayers:  AcquiredPlayer[]
+  loansThisSeason:  number          // limite de 3 por temporada (#37)
   clubCalendar:     CalendarGame[]
   cupStatus:        Record<string, 'active' | 'eliminated'>  // compId → status
 
@@ -303,6 +327,7 @@ export const useMatchStore = create<MatchStore>()(
   initialBudget:    10_000_000,
   fixtures:         [],
   acquiredPlayers:  [],
+  loansThisSeason:  0,
   clubCalendar:     [],
   cupStatus:        {},
   homeFormation:   null,
@@ -360,7 +385,7 @@ export const useMatchStore = create<MatchStore>()(
     set({
       myClubId: clubId, coachName, coachNationality, standings, screen: 'hub',
       season: 1, round: 1, matchHistory: [], events: [], completedSeasons: [],
-      contractGoal, initialBudget, fixtures, acquiredPlayers: [],
+      contractGoal, initialBudget, fixtures, acquiredPlayers: [], loansThisSeason: 0,
       clubCalendar, cupStatus, seasonEndVisible: false, victoryVisible: false,
     })
   },
@@ -895,7 +920,7 @@ export const useMatchStore = create<MatchStore>()(
     if (nextSeason > 15) {
       // round volta a 1: com 39 persistido, todo F5 no ClubSelect reabriria
       // o SeasonEndOverlay (onRehydrateStorage) e duplicaria completedSeasons
-      set({ seasonEndVisible: false, screen: 'select', round: 1 })
+      set({ seasonEndVisible: false, screen: 'select', round: 1, loansThisSeason: 0 })
     } else {
       const ls = useLineupStore.getState()
       useLineupStore.setState({
@@ -916,6 +941,7 @@ export const useMatchStore = create<MatchStore>()(
       set({ seasonEndVisible: false, season: nextSeason, round: 1, screen: 'hub',
             matchHistory: [], standings: s.standings.map(r => ({ ...r, pts:0,j:0,v:0,e:0,d:0,gf:0,ga:0 })),
             fixtures: generateFixtures(shuffledIds),
+            loansThisSeason: 0,   // limite de empréstimos zera na virada (#37)
             clubCalendar: newCalendar, cupStatus: newCupStatus })
     }
   },
@@ -952,7 +978,7 @@ export const useMatchStore = create<MatchStore>()(
     // antigo reverte ao JSON, então mantê-los em acquiredPlayers só os
     // sumiria do jogo pelo resto da carreira
     set({ myClubId: clubId, contractGoal, initialBudget, clubCalendar, cupStatus,
-          acquiredPlayers: [], screen: 'hub' })
+          acquiredPlayers: [], loansThisSeason: 0, screen: 'hub' })
   },
 
   executeTransfer(player, fromClubId, type) {
@@ -966,6 +992,15 @@ export const useMatchStore = create<MatchStore>()(
       return { ok: false, msg: 'Este jogador já pertence ao seu clube.' }
     }
 
+    // Anti-exploit (#37): nada de negócios com quem se enfrenta nesta rodada —
+    // senão dava para comprar o craque do adversário na véspera do jogo.
+    // Escopo: Brasileirão. Jogos de copa não têm adversário no modelo.
+    const oppId = myOpponentThisRound(s.fixtures, s.myClubId, s.round)
+    if (oppId && fromClubId === oppId) {
+      return { ok: false, msg: 'Vocês se enfrentam nesta rodada — sem negócios entre os dois clubes.' }
+    }
+
+    let luva = 0
     if (type === 'buy') {
       const needed = passe + sal * 6
       if (fin.budget < needed) {
@@ -973,12 +1008,27 @@ export const useMatchStore = create<MatchStore>()(
       }
       fin.addExpense(passe, 'transferencia', `Compra: ${player.name} (${fromClubId.toUpperCase()})`, s.round, s.season)
     } else {
-      // Empréstimo: apenas reserva 3 meses de salário
-      const reserve = sal * 3
-      if (fin.budget < reserve) {
-        return { ok: false, msg: `Saldo insuficiente para reserva de empréstimo (3 meses = R$ ${(reserve/1e6).toFixed(1)}M).` }
+      // ── Empréstimo (#37) ────────────────────────────────
+      if (s.loansThisSeason >= MAX_LOANS_PER_SEASON) {
+        return { ok: false, msg: `Limite de ${MAX_LOANS_PER_SEASON} empréstimos por temporada atingido.` }
       }
-      fin.addExpense(reserve, 'transferencia', `Empréstimo: ${player.name} (${fromClubId.toUpperCase()})`, s.round, s.season)
+      const cost = calcLoanCost(
+        player,
+        clubForce(s.myClubId!, liveRoster()),
+        divisionOf(s.myClubId!),
+        divisionOf(fromClubId),
+      )
+      luva = cost.luva
+      if (fin.budget < cost.total) {
+        return { ok: false, msg: `Saldo insuficiente. Necessário R$ ${(cost.total/1e6).toFixed(1)}M (sinal + luva).` }
+      }
+      fin.addExpense(cost.signing, 'transferencia',
+        `Empréstimo: ${player.name} (${fromClubId.toUpperCase()}) — sinal 6 meses`, s.round, s.season)
+      // A luva é paga ao ATLETA: é um SINK, não credita o clube cedente.
+      if (luva > 0) {
+        fin.addExpense(luva, 'luva',
+          `Luva: ${player.name} (${fromClubId.toUpperCase()}) — paga ao atleta`, s.round, s.season)
+      }
     }
 
     // Adiciona ao banco do useLineupStore
@@ -987,15 +1037,19 @@ export const useMatchStore = create<MatchStore>()(
 
     const entry: AcquiredPlayer = {
       player, fromClubId, type, round: s.round, season: s.season,
-      passe: type === 'buy' ? passe : 0, salary: sal,
+      passe: type === 'buy' ? passe : 0, salary: sal, luva,
     }
-    set({ acquiredPlayers: [...s.acquiredPlayers, entry] })
+    set({
+      acquiredPlayers: [...s.acquiredPlayers, entry],
+      loansThisSeason: type === 'loan' ? s.loansThisSeason + 1 : s.loansThisSeason,
+    })
     const salTxt = `salário R$ ${(sal / 1e3).toFixed(0)} mil/mês`
+    const luvaTxt = luva > 0 ? ` · luva R$ ${(luva / 1e6).toFixed(1)}M` : ''
     return {
       ok: true,
       msg: type === 'buy'
         ? `${player.name} contratado por R$ ${(passe / 1e6).toFixed(1)}M · ${salTxt}`
-        : `${player.name} emprestado · ${salTxt}`,
+        : `${player.name} emprestado · sinal R$ ${(sal * 6 / 1e6).toFixed(1)}M${luvaTxt} · ${salTxt}`,
     }
   },
   }),
@@ -1017,6 +1071,7 @@ export const useMatchStore = create<MatchStore>()(
       initialBudget:   s.initialBudget,
       fixtures:        s.fixtures,
       acquiredPlayers: s.acquiredPlayers,
+      loansThisSeason: s.loansThisSeason,   // sem isto, o F5 zeraria o limite de 3
       clubCalendar:    s.clubCalendar,
       cupStatus:       s.cupStatus,
       // O estado da partida ao vivo é transitório: um F5 em 'match' voltaria

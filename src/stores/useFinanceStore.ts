@@ -14,6 +14,7 @@ export type TransactionCategory =
   | 'bilheteria'
   | 'salarios'
   | 'transferencia'
+  | 'luva'          // paga ao atleta no empréstimo — sink, não credita ninguém
   | 'expansao'
   | 'premio'
   | 'outro'

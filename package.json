@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test:engine": "node scripts/test-poisson.js && node scripts/test-agecurve.js && node scripts/test-formations.js && node scripts/test-injury.js && node scripts/test-coach.js && node scripts/test-force-bands.js"
+    "test:engine": "node scripts/test-poisson.js && node scripts/test-agecurve.js && node scripts/test-formations.js && node scripts/test-injury.js && node scripts/test-coach.js && node scripts/test-force-bands.js && node scripts/test-luva.js"
   },
   "dependencies": {
     "react": "^18.3.1",

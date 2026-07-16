@@ -7,10 +7,10 @@ import { CLUBS } from '@/data/clubs'
 import { CLUB_TROPHIES } from '@/data/trophies'
 import {
   calcMarketValue, calcPasse, calcSalary, calcSquadValue,
-  checkTransferEligibility,
+  checkTransferEligibility, calcLoanCost, MAX_LOANS_PER_SEASON,
   fmtValue, fmtSalary,
 } from '@/engines/marketEngine'
-import { useMatchStore, type AcquiredPlayer } from '@/stores/useMatchStore'
+import { useMatchStore, divisionOf, myOpponentThisRound, type AcquiredPlayer } from '@/stores/useMatchStore'
 import { useTransferStore } from '@/stores/useTransferStore'
 import { useFinanceStore }  from '@/stores/useFinanceStore'
 import { useLineupStore }   from '@/stores/useLineupStore'
@@ -80,6 +80,9 @@ export default function TransferMarket() {
   const myClubId         = useMatchStore(s => s.myClubId)
   const acquiredPlayers  = useMatchStore(s => s.acquiredPlayers)
   const executeTransfer  = useMatchStore(s => s.executeTransfer)
+  const fixtures         = useMatchStore(s => s.fixtures)
+  const round            = useMatchStore(s => s.round)
+  const loansThisSeason  = useMatchStore(s => s.loansThisSeason)
   const budget           = useFinanceStore(s => s.budget)
   const toggleSale       = useTransferStore(s => s.toggleSale)
   const toggleLoan       = useTransferStore(s => s.toggleLoan)
@@ -138,12 +141,11 @@ export default function TransferMarket() {
     ? Math.round(allPlayers.reduce((s, p) => s + p.forca, 0) / Math.max(allPlayers.length, 1))
     : 70
 
-  const buyEligibility  = selectedPlayer
-    ? checkTransferEligibility(selectedPlayer, sellerForce, MY_CLUB_FORCE, MY_BUDGET, 'buy')
-    : null
-  const loanEligibility = selectedPlayer
-    ? checkTransferEligibility(selectedPlayer, sellerForce, MY_CLUB_FORCE, MY_BUDGET, 'loan')
-    : null
+  // Adversário desta rodada: sem negócios entre os dois clubes (#37)
+  const oppTodayId = useMemo(
+    () => myOpponentThisRound(fixtures, myClubId, round),
+    [fixtures, myClubId, round],
+  )
 
   // ── Jogadores filtrados ──────────────────────────────
   const sourcePool = useMemo(() => {
@@ -164,6 +166,28 @@ export default function TransferMarket() {
     const row = sourcePool.find(r => r.player.num === selectedPlayer.num && r.player.name === selectedPlayer.name)
     return row?.clubId ?? selectedClubId
   }, [selectedPlayer, filterAllClubs, sourcePool, selectedClubId])
+
+  // ── Elegibilidade e custo (#37) ──────────────────────
+  const eligBase = selectedPlayer && selectedFromClubId ? {
+    player:          selectedPlayer,
+    sellerClubForce: sellerForce,
+    buyerClubForce:  MY_CLUB_FORCE,
+    buyerBudget:     MY_BUDGET,
+    buyerDivision:   divisionOf(myClubId ?? ''),
+    sellerDivision:  divisionOf(selectedFromClubId),
+    loansThisSeason,
+    fromClubId:      selectedFromClubId,
+    blockedClubId:   oppTodayId,
+  } : null
+
+  const buyEligibility  = eligBase ? checkTransferEligibility({ ...eligBase, type: 'buy'  }) : null
+  const loanEligibility = eligBase ? checkTransferEligibility({ ...eligBase, type: 'loan' }) : null
+
+  // Custo do empréstimo — MESMA função que o store usa para cobrar. A divergência
+  // entre o que a UI mostrava e o que o store cobrava era o bug original.
+  const loanCost = selectedPlayer && selectedFromClubId
+    ? calcLoanCost(selectedPlayer, MY_CLUB_FORCE, divisionOf(myClubId ?? ''), divisionOf(selectedFromClubId))
+    : null
 
   const filteredRows = useMemo(() => sourcePool.filter(({ player: p, clubId }) => {
     if (acquiredKeys.has(`${clubId}_${p.num}`)) return false  // já adquirido
@@ -577,8 +601,28 @@ export default function TransferMarket() {
                       {transferMsg.ok ? '✓' : '✗'} {transferMsg.text}
                     </span>
                   )}
+                  {/* Contador de empréstimos da temporada (#37) */}
+                  <span className={`text-[9px] font-bold border rounded px-[5px] py-[2px] ${
+                    loansThisSeason >= MAX_LOANS_PER_SEASON
+                      ? 'text-glred border-glred/40 bg-glred/10'
+                      : 'text-[#5a8aa0] border-[#2a4060]'}`}>
+                    Empréstimos {loansThisSeason}/{MAX_LOANS_PER_SEASON}
+                  </span>
+
+                  {/* Custo do EMPRÉSTIMO — antes só a compra mostrava preço, e o
+                      aviso vermelho dela confundia quem queria emprestar (#37) */}
+                  {!transferMsg && selectedPlayer && loanCost && loanEligibility?.allowed && (
+                    <span className="text-[10px] text-[#8ab0c8] whitespace-nowrap">
+                      🔄 sinal R$ {fmtValue(loanCost.signing)}
+                      <span className="text-[#4a6070]"> (6 meses)</span>
+                      {loanCost.luva > 0 && (
+                        <span className="text-[#f0a020]"> + luva R$ {fmtValue(loanCost.luva)}</span>
+                      )}
+                      <span className="text-[#4a6070]"> · R$ {fmtSalary(loanCost.salary)}/mês</span>
+                    </span>
+                  )}
                   {!transferMsg && selectedPlayer && !(loanEligibility?.allowed) && (
-                    <span className="text-[10px] text-[#f0a020]/70 max-w-[200px] truncate">
+                    <span className="text-[10px] text-[#f0a020]/70 max-w-[220px] truncate">
                       🔄 {loanEligibility?.reason}
                     </span>
                   )}
@@ -589,7 +633,11 @@ export default function TransferMarket() {
                   )}
                   <ActionButton label="Empréstimo"
                     enabled={!!selectedPlayer && (loanEligibility?.allowed ?? false)}
-                    tooltip={loanEligibility?.reason}
+                    tooltip={loanEligibility?.allowed && loanCost
+                      ? `Sinal R$ ${fmtValue(loanCost.signing)} (6 meses de salário)`
+                        + (loanCost.luva > 0 ? ` + luva R$ ${fmtValue(loanCost.luva)} paga ao atleta` : '')
+                        + ` · salário R$ ${fmtSalary(loanCost.salary)}/mês · total agora R$ ${fmtValue(loanCost.total)}`
+                      : loanEligibility?.reason}
                     onClick={() => {
                       if (!selectedPlayer || !selectedFromClubId) return
                       const result = executeTransfer(selectedPlayer, selectedFromClubId, 'loan')
