@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useMatchStore } from '@/stores/useMatchStore'
 import { useAuthStore }  from '@/stores/useAuthStore'
-import Shirt from './Shirt'
+import ClubCrest from './ClubCrest'
 import { avgSquad } from '@/engines/matchEngine'
 import { getFormationBonus, FORMATION_LABELS } from '@/data/formations'
 
@@ -66,7 +66,7 @@ export default function Scoreboard() {
     <div className="bg-surface border-b border-border px-4 py-2 flex items-center gap-3 flex-wrap justify-center">
       {/* Time casa */}
       <div className="flex items-center gap-2">
-        <Shirt colors={homeClub.colors} size={32} />
+        <ClubCrest colors={homeClub.crestColors} short={homeClub.short} size={32} />
         <div>
           <div className="font-bebas text-lg tracking-wide leading-none">{homeClub.short}</div>
           <div className="text-[10px] text-gray-400">
@@ -123,7 +123,7 @@ export default function Scoreboard() {
             Força: <span className="text-gold">{avA}</span>
           </div>
         </div>
-        <Shirt colors={awayClub.colors} size={32} />
+        <ClubCrest colors={awayClub.crestColors} short={awayClub.short} size={32} />
       </div>
 
       <div className="text-[#243444]">|</div>

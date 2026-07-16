@@ -1,4 +1,11 @@
-import type { Player } from '@/engines/types'
+import type { Player, Pos } from '@/engines/types'
+
+// ── Inicial da posição (1 letra) ────────────────────────────────────────────
+// Usada nos discos DURANTE a partida (campo, banco e Ajustes Táticos), onde
+// não há espaço para o rótulo de 2–3 letras do pré-jogo.
+export const POS_INITIAL: Record<Pos, string> = {
+  GK: 'G', LAT: 'L', ZAG: 'Z', VOL: 'V', MEI: 'M', ATA: 'A',
+}
 
 // ── Todas as formações do jogo (excluindo 1-1-8 pré-moderno) ──────────────
 export type FormationKey =

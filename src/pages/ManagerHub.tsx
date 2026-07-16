@@ -20,7 +20,7 @@ import {
 } from '@/data/formations'
 import { VerticalField }  from '@/pages/LineupEditor'
 import { withBotFatigue, effectiveForca } from '@/engines/fatigueEngine'
-import Shirt              from '@/components/Shirt'
+import ClubCrest          from '@/components/ClubCrest'
 import type { Club, Player } from '@/engines/types'
 import type { StandingRow }  from '@/stores/useMatchStore'
 
@@ -241,7 +241,7 @@ function IconSidebar({
 
       {/* Clube + rodada */}
       <div className="w-full flex flex-col items-center py-[8px] border-b border-border gap-[3px]">
-        <Shirt colors={myClub.colors} size={26} />
+        <ClubCrest colors={myClub.crestColors} short={myClub.short} size={26} />
         <span className="font-bebas text-[9px] text-[#4a6070] leading-none tracking-wide">
           {round}/{38}
         </span>

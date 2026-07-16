@@ -15,6 +15,7 @@ import { useTransferStore } from '@/stores/useTransferStore'
 import { useFinanceStore }  from '@/stores/useFinanceStore'
 import { useLineupStore }   from '@/stores/useLineupStore'
 import { clubForce }        from '@/data/clubStrength'
+import { POS_INITIAL }      from '@/data/formations'
 import type { Player, Pos, Spec } from '@/engines/types'
 import ClubCrest from '@/components/ClubCrest'
 
@@ -26,9 +27,6 @@ const SPEC_LABEL: Record<string, string> = {
 const SPEC_FULL: Record<string, string> = {
   FI: 'Finalização', VE: 'Velocidade', DR: 'Drible',   DE: 'Desarme',
   PA: 'Passe',       RE: 'Reflexos',   FO: 'Força',    MA: 'Marcação',
-}
-const POS_LABEL: Record<string, string> = {
-  GK: 'G', LAT: 'L', ZAG: 'Z', VOL: 'V', MEI: 'M', ATA: 'A',
 }
 const NAT_FLAG: Record<string, string> = {
   BRA: '🇧🇷', ARG: '🇦🇷', URU: '🇺🇾', PAR: '🇵🇾',
@@ -292,7 +290,7 @@ export default function TransferMarket() {
             <div className="px-3 pt-3 pb-2 border-b border-border">
               <div className="flex items-center gap-2 mb-[2px]">
                 <span className="text-[10px] font-bold px-[5px] py-[1px] rounded bg-surface border border-border text-[#8090a0]">
-                  {POS_LABEL[selectedPlayer.pos]}
+                  {POS_INITIAL[selectedPlayer.pos]}
                 </span>
                 <span className="text-[12px] font-bold text-white truncate">{selectedPlayer.name}</span>
                 {selectedPlayer.isStar && <span>⭐</span>}
@@ -537,7 +535,7 @@ export default function TransferMarket() {
                         className={`border-b border-border/40 cursor-pointer transition-colors
                                     ${sel ? 'bg-gold/15' : 'hover:bg-surface2'}`}>
                         <td className={`py-[5px] pl-3 font-bold text-[10px] ${sel ? 'text-gold' : 'text-[#5a7080]'}`}>
-                          {POS_LABEL[p.pos]}
+                          {POS_INITIAL[p.pos]}
                         </td>
                         <td className="py-[5px] text-center text-[12px]">{NAT_FLAG[p.nationality] ?? '🏳'}</td>
                         <td className={`py-[5px] ${sel ? 'text-white font-medium' : 'text-[#8090a0]'}`}>

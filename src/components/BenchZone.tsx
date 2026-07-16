@@ -1,5 +1,6 @@
 import type { Player } from '@/engines/types'
 import { useMatchStore } from '@/stores/useMatchStore'
+import { POS_INITIAL } from '@/data/formations'
 
 interface Props {
   side:   'home' | 'away'
@@ -63,6 +64,10 @@ export default function BenchZone({ side, bench, colors, label }: Props) {
                 <div className="absolute left-0 right-0" style={{ top: '30%', height: '28%', background: stripe }} />
                 <div className="absolute bottom-0 left-0 right-0" style={{ height: '20%', background: detail || bg }} />
               </div>
+              <span className="font-bebas text-[9px] text-[#8ab0c8] absolute bottom-[1px] left-[1px] z-10
+                               bg-black/70 rounded px-[1px] leading-[1.2]">
+                {POS_INITIAL[p.pos]}
+              </span>
               <span className="font-bebas text-[9px] text-gold absolute bottom-[1px] right-[1px] z-10
                                bg-black/70 rounded px-[1px] leading-[1.2]">
                 {p.forca}

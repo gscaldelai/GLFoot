@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMatchStore } from '@/stores/useMatchStore'
 import type { Player } from '@/engines/types'
-import { FORMATION_LABELS, type FormationKey } from '@/data/formations'
+import { FORMATION_LABELS, POS_INITIAL, type FormationKey } from '@/data/formations'
 
 const ALL_FORMATIONS = Object.keys(FORMATION_LABELS) as FormationKey[]
 
@@ -32,6 +32,9 @@ function Disc({ player, colors, selected, dimmed, onClick, size = 44 }: {
         <div className="absolute left-0 right-0" style={{ top: '30%', height: '28%', background: stripe }} />
         <div className="absolute bottom-0 left-0 right-0" style={{ height: '20%', background: detail || bg }} />
       </div>
+      <span className="font-bebas text-[9px] text-[#8ab0c8] absolute bottom-[2px] left-[1px] z-10 bg-black/70 rounded px-[2px] leading-[1.2]">
+        {POS_INITIAL[player.pos]}
+      </span>
       <span className="font-bebas text-[9px] text-gold absolute bottom-[2px] right-[1px] z-10 bg-black/70 rounded px-[2px] leading-[1.2]">
         {player.forca}
       </span>

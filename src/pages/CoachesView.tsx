@@ -11,7 +11,7 @@ import type { Player }        from '@/engines/types'
 import { CLUBS_MAP }          from '@/data/clubs'
 import { calcPlayerReputation } from '@/engines/coachEngine'
 import { getContractGoal, calcInitialBudget } from '@/data/clubGoals'
-import Shirt from '@/components/Shirt'
+import ClubCrest from '@/components/ClubCrest'
 
 function Stars({ n }: { n: number }) {
   return (
@@ -69,7 +69,7 @@ export function TecnicosScreen() {
                     className={`border-t border-border/50 ${isMe ? 'bg-gold/5' : 'hover:bg-surface2'}`}>
                   <td className="py-[6px]">
                     <div className="flex items-center gap-2">
-                      {club && <Shirt colors={club.colors} size={20} />}
+                      {club && <ClubCrest colors={club.crestColors} short={club.short} size={20} />}
                       <span className={`font-bold ${isMe ? 'text-gold' : 'text-white'}`}>{entry.name}</span>
                     </div>
                   </td>
@@ -170,7 +170,7 @@ export function CentralEmpregoScreen() {
                 <div key={clubId}
                      className="w-[230px] bg-surface border border-border rounded-xl p-4 flex flex-col gap-2">
                   <div className="flex items-center gap-2">
-                    <Shirt colors={club.colors} size={28} />
+                    <ClubCrest colors={club.crestColors} short={club.short} size={28} />
                     <div>
                       <div className="font-bebas text-[16px] tracking-[1px] text-white leading-none">{entry.name}</div>
                       <span className={`text-[9px] font-bold border rounded px-[4px] ${forceColor(forca)}`}>

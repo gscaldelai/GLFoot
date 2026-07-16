@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import type { Player } from '@/engines/types'
 import { useMatchStore } from '@/stores/useMatchStore'
+import { POS_INITIAL } from '@/data/formations'
 
 interface Props {
   player:   Player
@@ -78,6 +79,13 @@ export default function PlayerDisc({ player, fieldIdx, side, colors, justSubbed 
           <div className="absolute left-0 right-0" style={{ top: '30%', height: '28%', background: stripe }} />
           <div className="absolute bottom-0 left-0 right-0" style={{ height: '20%', background: detail || bg }} />
         </div>
+        {/* Posição — 1 letra (badge inferior esquerdo, espelha a força) */}
+        <span
+          className="font-bebas text-[9px] text-[#8ab0c8] absolute bottom-[2px] left-[1px] z-10
+                     bg-black/70 rounded px-[2px] leading-[1.2]"
+        >
+          {POS_INITIAL[player.pos]}
+        </span>
         {/* Força (badge inferior direito) */}
         <span
           className="font-bebas text-[9px] text-gold absolute bottom-[2px] right-[1px] z-10
