@@ -262,6 +262,29 @@ verificados no browser (checks via `window.glfoot` + fluxo pela UI):
   **Verificado no browser:** banco do SPFC na partida veio com 4 em vez de 5 (sem o lesionado) e
   nenhum `injured` nos bancos dos dois times.
 
+- 🔲 **J-03** 🔴 **A Libertadores NUNCA pode ser vencida** — descoberto ao construir a
+  tela de Tabelas (#33). A final da Libertadores está agendada para a **semana 43**
+  (`calendarEngine`), mas a simulação de copas roda dentro do `nextRound` comparando
+  `game.week === currentWeek` com `currentWeek = s.round` — e a **rodada para em 38**.
+  Logo a fase final nunca é alcançada: o clube não perde nem ganha, a competição
+  simplesmente congela. A tela de Tabelas marca essas fases como "NÃO SIMULADA" em vez
+  de fingir que existem. **A convenção semana×rodada diverge** entre `nextRound`
+  (`week = round`, 1-38) e o `CalendarView`/`clubCalendar` (semanas 1-52) — é a raiz
+  do problema e afeta qualquer competição com fase depois da semana 38.
+
+- 🔲 **J-04** 🟠 **Fases de grupo nunca são simuladas** — o `nextRound` só processa
+  fases `single_elim` / `two_leg_elim`; as fases de grupo do catálogo são ignoradas,
+  então o clube nunca é eliminado (nem classificado) nelas.
+
+- 🔲 **J-05** 🟡 **Confronto de ida e volta sorteia eliminação 2×** — em
+  `two_leg_elim`, a simulação roda a moeda uma vez por JOGO em vez de uma vez por
+  CONFRONTO. O clube tem duas chances independentes de ser eliminado no mesmo mata-mata,
+  o que dobra a taxa efetiva de queda.
+
+  *(J-03 a J-05 são do mesmo subsistema — a simulação de copas do `nextRound`. Mexer
+  neles altera comportamento de engine, então exigem teste de mesa. Recomendo tratar
+  os três juntos, junto com a unificação da convenção semana×rodada.)*
+
 ---
 
-*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Backlog da revisão adversarial 12/07 zerado em 13/07 · J-01 (lesão) e J-02 (lesionado no banco) abertos em 14/07.*
+*Relatório gerado em 2026-06-12 · GLfoot Modo Carreira · Backlog da revisão adversarial 12/07 zerado em 13/07 · J-01 e J-02 abertos e RESOLVIDOS em 14/07 · J-03 a J-05 (simulação de copas) abertos em 14/07.*

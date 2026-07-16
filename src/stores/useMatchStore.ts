@@ -136,6 +136,21 @@ export interface AcquiredPlayer {
   luva?:      number   // luva paga ao atleta no empréstimo (sink) — 0/undefined se não houve
 }
 
+/**
+ * Registro de ONDE o clube caiu numa copa. O cupStatus só guarda
+ * 'active' | 'eliminated' — sem isto, a tela de Tabelas não teria como dizer em
+ * que fase a eliminação aconteceu (o log de confiança tem a fase no texto, mas é
+ * cortado em 50 eventos e some no meio da temporada).
+ * Campo aditivo: saves antigos rehidratam sem a chave e o default {} prevalece.
+ */
+export interface CupElimination {
+  compId:    string
+  phaseId:   string
+  phaseName: string
+  round:     number
+  season:    number
+}
+
 interface MatchStore {
   // ── carreira ──────────────────────────────────────────
   myClubId:         string | null
@@ -153,6 +168,7 @@ interface MatchStore {
   loansThisSeason:  number          // limite de 3 por temporada (#37)
   clubCalendar:     CalendarGame[]
   cupStatus:        Record<string, 'active' | 'eliminated'>  // compId → status
+  cupElimination:   Record<string, CupElimination>           // compId → fase da queda
 
   // ── partida ───────────────────────────────────────────
   homeFormation: FormationKey | null   // formação usada pelo time da casa
@@ -330,6 +346,7 @@ export const useMatchStore = create<MatchStore>()(
   loansThisSeason:  0,
   clubCalendar:     [],
   cupStatus:        {},
+  cupElimination:   {},
   homeFormation:   null,
   awayFormation:   null,
   homeClub:        null,
@@ -389,7 +406,8 @@ export const useMatchStore = create<MatchStore>()(
       myClubId: clubId, coachName, coachNationality, standings, screen: 'hub',
       season: 1, round: 1, matchHistory: [], events: [], completedSeasons: [],
       contractGoal, initialBudget, fixtures, acquiredPlayers: [], loansThisSeason: 0,
-      clubCalendar, cupStatus, seasonEndVisible: false, victoryVisible: false,
+      clubCalendar, cupStatus, cupElimination: {},
+      seasonEndVisible: false, victoryVisible: false,
     })
   },
 
@@ -843,9 +861,10 @@ export const useMatchStore = create<MatchStore>()(
     useFinanceStore.getState().deductWages(squad, bench2, s.round, s.season)
 
     // ── Simulação de copas: fases eliminatórias da semana atual ───────────
-    const currentWeek = s.round   // aproximação: rodada ≈ semana
-    const cupStatus   = { ...s.cupStatus }
-    const myForce     = clubForce(s.myClubId!, liveRoster())
+    const currentWeek    = s.round   // aproximação: rodada ≈ semana
+    const cupStatus      = { ...s.cupStatus }
+    const cupElimination = { ...s.cupElimination }
+    const myForce        = clubForce(s.myClubId!, liveRoster())
 
     for (const game of s.clubCalendar) {
       const comp = COMPETITION_CATALOG[game.competitionId]
@@ -864,6 +883,13 @@ export const useMatchStore = create<MatchStore>()(
 
       if (!advances) {
         cupStatus[game.competitionId] = 'eliminated'
+        cupElimination[game.competitionId] = {
+          compId:    game.competitionId,
+          phaseId:   phase.id,
+          phaseName: phase.name,
+          round:     s.round,
+          season:    s.season,
+        }
         const prestige = CUP_PRESTIGE[game.competitionId] ?? 1
         useConfidenceStore.getState().onCupElimination(
           comp.name, phase.name, s.round, s.season, prestige,
@@ -885,7 +911,8 @@ export const useMatchStore = create<MatchStore>()(
 
     const nextRound = s.round + 1
     const committed = { standings, matchHistory: [...s.matchHistory, histRow],
-                        round: nextRound, victoryVisible: false, ended: false, cupStatus }
+                        round: nextRound, victoryVisible: false, ended: false,
+                        cupStatus, cupElimination }
     if (nextRound > 38) {
       set({ ...committed, seasonEndVisible: true })
     } else {
@@ -951,7 +978,7 @@ export const useMatchStore = create<MatchStore>()(
             matchHistory: [], standings: s.standings.map(r => ({ ...r, pts:0,j:0,v:0,e:0,d:0,gf:0,ga:0 })),
             fixtures: generateFixtures(shuffledIds),
             loansThisSeason: 0,   // limite de empréstimos zera na virada (#37)
-            clubCalendar: newCalendar, cupStatus: newCupStatus })
+            clubCalendar: newCalendar, cupStatus: newCupStatus, cupElimination: {} })
     }
   },
 
@@ -989,7 +1016,7 @@ export const useMatchStore = create<MatchStore>()(
     // Mercado re-sorteado: o clube antigo volta a listar, o novo sai (#32)
     useTransferStore.getState().seedMarket(get().season, clubId)
     set({ myClubId: clubId, contractGoal, initialBudget, clubCalendar, cupStatus,
-          acquiredPlayers: [], loansThisSeason: 0, screen: 'hub' })
+          cupElimination: {}, acquiredPlayers: [], loansThisSeason: 0, screen: 'hub' })
   },
 
   executeTransfer(player, fromClubId, type) {
@@ -1087,6 +1114,7 @@ export const useMatchStore = create<MatchStore>()(
       loansThisSeason: s.loansThisSeason,   // sem isto, o F5 zeraria o limite de 3
       clubCalendar:    s.clubCalendar,
       cupStatus:       s.cupStatus,
+      cupElimination:  s.cupElimination,
       // O estado da partida ao vivo é transitório: um F5 em 'match' voltaria
       // a uma tela de jogo vazia e sem saída — persiste 'hub' e a rodada é
       // re-disputada.

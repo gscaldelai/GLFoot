@@ -20,7 +20,7 @@ const COMP_COLORS: Record<string, { bg: string; text: string; border: string }> 
   CNOR: { bg: '#2a0a1a', text: '#d060a0', border: '#4a1030' },
 }
 
-function getColor(short: string) {
+export function getColor(short: string) {
   return COMP_COLORS[short] ?? { bg: '#1a1a2a', text: '#8090a0', border: '#2a3040' }
 }
 
@@ -465,7 +465,7 @@ function MyGameRow({
 }
 
 // ── Abreviação de fase ───────────────────────────────────
-function abbreviatePhase(name: string): string {
+export function abbreviatePhase(name: string): string {
   const map: Record<string, string> = {
     'Fase de Grupos':    'Grupos',
     'Temporada Regular': '',

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import CalendarView    from '@/pages/CalendarView'
-import Standings       from '@/components/Standings'
+import CompetitionsView from '@/pages/CompetitionsView'
 import StadiumView     from '@/pages/StadiumView'
 import TransferMarket  from '@/pages/TransferMarket'
+import FinanceView     from '@/pages/FinanceView'
 import { useMatchStore }       from '@/stores/useMatchStore'
 import { useLineupStore }      from '@/stores/useLineupStore'
 import { useConfidenceStore }  from '@/stores/useConfidenceStore'
@@ -27,7 +28,7 @@ import type { StandingRow }  from '@/stores/useMatchStore'
 // ── Telas disponíveis ─────────────────────────────────────────────────────────
 type NavScreen =
   | 'painel' | 'jogos'    | 'tabelas' | 'estadios'
-  | 'mercado' | 'tecnicos'| 'historia' | 'emprego'
+  | 'mercado' | 'financas'| 'tecnicos'| 'historia' | 'emprego'
 
 interface NavItem {
   id:        NavScreen
@@ -48,6 +49,7 @@ const NAV_GROUPS: Array<{ items: NavItem[] }> = [
     items: [
       { id: 'tabelas',  icon: '📊', label: 'Tabelas',           shortcut: 'F5' },
       { id: 'mercado',  icon: '💸', label: 'Mercado',           shortcut: 'F8' },
+      { id: 'financas', icon: '💰', label: 'Extrato Financeiro', shortcut: 'F7' },
     ],
   },
   {
@@ -60,7 +62,7 @@ const NAV_GROUPS: Array<{ items: NavItem[] }> = [
 ]
 
 const SHORTCUT_MAP: Record<string, NavScreen> = {
-  F4: 'jogos', F5: 'tabelas', F6: 'estadios', F8: 'mercado',
+  F4: 'jogos', F5: 'tabelas', F6: 'estadios', F7: 'financas', F8: 'mercado',
 }
 
 // ── Modal de Demissão ────────────────────────────────────────────────────────
@@ -215,6 +217,7 @@ export default function ManagerHub() {
         {screen === 'jogos'    && <CalendarView />}
         {screen === 'estadios' && <StadiumView />}
         {screen === 'mercado'  && <TransferMarket />}
+        {screen === 'financas' && <FinanceView />}
         {screen === 'tabelas'  && <StandingsScreen />}
         {screen === 'tecnicos' && <TecnicosScreen />}
         {screen === 'emprego'  && <CentralEmpregoScreen />}
@@ -314,20 +317,16 @@ const PLACEHOLDER_INFO: Record<NavScreen, { icon: string; label: string; desc: s
   tabelas:  { icon: '📊', label: 'Tabelas',            desc: 'Classificação por pontos, saldo de gols e chaveamento (Mata-Mata) das Copas.' },
   estadios: { icon: '🏟', label: 'Estádios',           desc: 'Gerencie a capacidade do seu estádio, calcule a renda da bilheteria e expanda sua arena.' },
   mercado:  { icon: '💸', label: 'Mercado',            desc: 'Navegue pelos elencos, busque jogadores e gerencie transferências e empréstimos.' },
+  financas: { icon: '💰', label: 'Extrato Financeiro', desc: 'Receitas e despesas por rodada: bilheteria, salários, transferências e obras.' },
   tecnicos: { icon: '🎖', label: 'Técnicos',           desc: 'Ranking global de treinadores com pontuação por títulos conquistados.' },
   historia: { icon: '📖', label: 'História',           desc: 'Almanaque das temporadas — campeões, evolução do ranking e conquistas.' },
   emprego:  { icon: '💼', label: 'Central de Emprego', desc: 'Clubes sem técnico, propostas recebidas e opção de pedir demissão.' },
 }
 
+// Seletor de competições do clube (#33) — a tela deixou de ser fixa no
+// Brasileirão. Toda a lógica vive em CompetitionsView.
 function StandingsScreen() {
-  return (
-    <div className="flex flex-col flex-1 overflow-hidden p-4">
-      <div className="font-bebas text-[15px] tracking-[3px] text-[#6a8090] mb-3">TABELA · BRASILEIRÃO</div>
-      <div className="flex-1 overflow-auto">
-        <Standings />
-      </div>
-    </div>
-  )
+  return <CompetitionsView />
 }
 
 function PlaceholderScreen({ screen }: { screen: NavScreen }) {
