@@ -13,9 +13,10 @@ import {
 import { useMatchStore, type AcquiredPlayer } from '@/stores/useMatchStore'
 import { useTransferStore } from '@/stores/useTransferStore'
 import { useFinanceStore }  from '@/stores/useFinanceStore'
+import { useLineupStore }   from '@/stores/useLineupStore'
+import { clubForce }        from '@/data/clubStrength'
 import type { Player, Pos, Spec } from '@/engines/types'
 import ClubCrest from '@/components/ClubCrest'
-import { avgSquad } from '@/engines/matchEngine'
 
 // ── Helpers ──────────────────────────────────────────────
 const SPEC_LABEL: Record<string, string> = {
@@ -105,6 +106,14 @@ export default function TransferMarket() {
   const [filterOnlySale,setFilterOnlySale]= useState(false)
   const [filterOnlyLoan,setFilterOnlyLoan]= useState(false)
 
+  // Elenco vivo do meu clube (titulares + banco) — fonte da minha força real
+  const mySlots  = useLineupStore(s => s.slots)
+  const myBench  = useLineupStore(s => s.bench)
+  const myRoster = useMemo(
+    () => [...mySlots.filter(Boolean) as Player[], ...myBench],
+    [mySlots, myBench],
+  )
+
   // ── Dados do clube selecionado ───────────────────────
   const selectedClub  = SERIE_A_BASIC.find(c => c.id === selectedClubId) ?? null
   const realClub      = CLUBS.find(c => c.id === selectedClubId) ?? null
@@ -120,11 +129,10 @@ export default function TransferMarket() {
     [acquiredPlayers],
   )
 
-  // Força média real do meu clube
-  const myRealClub    = CLUBS.find(c => c.id === myClubId)
-  const MY_CLUB_FORCE = myRealClub
-    ? Math.round(avgSquad([...myRealClub.squad, ...myRealClub.bench]))
-    : 72
+  // Força do meu clube = média dos atletas do elenco VIVO (titulares + banco).
+  // Antes saía do JSON estático: comprar um craque não mexia na própria força,
+  // que é justamente o balizador das transferências.
+  const MY_CLUB_FORCE = clubForce(myClubId ?? '', myRoster)
   const MY_BUDGET     = budget
   const sellerForce   = realClub
     ? Math.round(allPlayers.reduce((s, p) => s + p.forca, 0) / Math.max(allPlayers.length, 1))

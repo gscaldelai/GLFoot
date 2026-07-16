@@ -4,7 +4,7 @@ import { useMatchStore }  from '@/stores/useMatchStore'
 import { useAuthStore }   from '@/stores/useAuthStore'
 import type { Club }      from '@/engines/types'
 import ClubCrest          from '@/components/ClubCrest'
-import { isAvailableOnFree, CLUB_STRENGTH } from '@/data/clubStrength'
+import { isAvailableOnFree, clubForce, forceLabel } from '@/data/clubStrength'
 import { getContractGoal, calcInitialBudget } from '@/data/clubGoals'
 
 const AVAILABLE_LEAGUES = [
@@ -258,18 +258,20 @@ function ContractPlaceholder() {
 
 // ── Proposta de Contrato ──────────────────────────────────────────────────────
 function ContractPanel({ club, coachName }: { club: Club; coachName: string }) {
-  const strengthEntry = CLUB_STRENGTH.find(e => e.id === club.id)
-  const forcaMedia    = strengthEntry?.forcaMedia ?? 60
-  const goal          = getContractGoal(strengthEntry?.tier, forcaMedia)
-  const budget        = calcInitialBudget(forcaMedia)
-  const tier          = strengthEntry?.tier ?? '—'
+  // Força do clube = média dos atletas (elenco + banco). É ela que define meta,
+  // orçamento e rótulo — não existe mais tier.
+  const forcaMedia = clubForce(club.id)
+  const goal       = getContractGoal(forcaMedia)
+  const budget     = calcInitialBudget(forcaMedia)
+  const label      = forceLabel(forcaMedia)
 
-  const TIER_LABEL: Record<string, string> = {
-    S: 'Elite Nacional', A: 'Grande Clube', B: 'Clube Médio', C: 'Clube Pequeno', D: 'Acesso',
+  const LABEL_COLOR: Record<string, string> = {
+    'Elite Nacional': '#f0c040',
+    'Grande Clube':   '#80c0f0',
+    'Clube Médio':    '#60c080',
+    'Clube Pequeno':  '#a0a0c0',
   }
-  const TIER_COLOR: Record<string, string> = {
-    S: '#f0c040', A: '#80c0f0', B: '#60c080', C: '#a0a0c0', D: '#808080',
-  }
+  const labelColor = LABEL_COLOR[label] ?? '#808080'
 
   const GOAL_ICON: Record<string, string> = {
     champion: '🏆', top4: '🎯', top8: '📈', no_relegation: '🛡', survive: '⚓',
@@ -288,9 +290,9 @@ function ContractPanel({ club, coachName }: { club: Club; coachName: string }) {
         </div>
         <div
           className="text-[9px] font-bold tracking-[1px] px-2 py-[3px] rounded-full border"
-          style={{ color: TIER_COLOR[tier] ?? '#808080', borderColor: (TIER_COLOR[tier] ?? '#808080') + '50' }}
+          style={{ color: labelColor, borderColor: labelColor + '50' }}
         >
-          {TIER_LABEL[tier] ?? 'Clube'}
+          {label} · {forcaMedia.toFixed(1)}
         </div>
       </div>
 

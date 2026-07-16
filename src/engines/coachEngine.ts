@@ -9,7 +9,7 @@
 //  NÃO alterar constantes sem refazer o teste de mesa.
 // ═══════════════════════════════════════════════════════
 
-import { CLUB_STRENGTH } from '@/data/clubStrength'
+import { CLUB_STRENGTH, FORCE_BANDS, clubForce } from '@/data/clubStrength'
 import type { CompletedSeason } from '@/stores/useMatchStore'
 
 export interface Coach {
@@ -30,12 +30,15 @@ export interface CoachNews {
   text:   string
 }
 
-// ── Regra central do F-01: reputação mínima para ser contratado por tier ──────
-export const MIN_REPUTATION_BY_TIER: Record<'S' | 'A' | 'B' | 'C', number> = {
-  S: 4,   // Flamengo, Atlético-MG só contratam 4★+
-  A: 3,
-  B: 2,
-  C: 1,
+// ── Regra central do F-01: reputação mínima para ser contratado ───────────────
+// Baliza é a FORÇA do clube (média dos atletas) — não existe mais sistema de
+// Tiers. Os limiares são os mesmos de FORCE_BANDS, então a regra é idêntica à
+// que existia por tier (S:4 · A:3 · B:2 · C:1).
+export function minReputationForForce(force: number): number {
+  if (force >= FORCE_BANDS.S) return 4   // Flamengo, Atlético-MG só contratam 4★+
+  if (force >= FORCE_BANDS.A) return 3
+  if (force >= FORCE_BANDS.B) return 2
+  return 1
 }
 
 // ── Bônus de λ por reputação do técnico ───────────────────────────────────────
@@ -93,7 +96,7 @@ export function generateInitialCoaches(playerClubId: string): Coach[] {
   const coaches: Coach[] = []
   for (const entry of CLUB_STRENGTH) {
     if (entry.id === playerClubId) continue
-    const minRep = MIN_REPUTATION_BY_TIER[entry.tier]
+    const minRep = minReputationForForce(clubForce(entry.id))
     const rep    = minRep + (Math.random() < 0.35 ? 1 : 0)
     coaches.push(makeCoach(rep, entry.id, coaches.length + 1))
   }
@@ -105,7 +108,7 @@ export function generateInitialCoaches(playerClubId: string): Coach[] {
 
 /** Posição esperada de cada clube (rank por força média) */
 export function expectedPositions(): Record<string, number> {
-  const sorted = [...CLUB_STRENGTH].sort((a, b) => b.forcaMedia - a.forcaMedia)
+  const sorted = [...CLUB_STRENGTH].sort((a, b) => clubForce(b.id) - clubForce(a.id))
   const map: Record<string, number> = {}
   sorted.forEach((e, i) => { map[e.id] = i + 1 })
   return map
@@ -169,7 +172,7 @@ export function processCoachRound(
     if (entry.id === playerClubId) continue
     if (!updated.some(c => c.clubId === null)) break
 
-    const minRep   = MIN_REPUTATION_BY_TIER[entry.tier]
+    const minRep   = minReputationForForce(clubForce(entry.id))
     const eligible = updated.filter(c => c.clubId === null && c.reputation >= minRep)
 
     let hire: Coach
@@ -214,7 +217,7 @@ export function buildPlayerOffers(
 ): string[] {
   const eligible = CLUB_STRENGTH.filter(e =>
     e.id !== excludeClubId &&
-    MIN_REPUTATION_BY_TIER[e.tier] <= playerReputation,
+    minReputationForForce(clubForce(e.id)) <= playerReputation,
   )
   // Embaralha e pega até 3 — clubes mais fracos aparecem mais (mais vagas reais)
   const shuffled = [...eligible].sort(() => Math.random() - 0.5)

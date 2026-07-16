@@ -2,7 +2,11 @@
 //  GLfoot — Club Goals & Contract System
 //  Define as metas de cada clube ao assinar contrato,
 //  e calcula o orçamento inicial proporcional à força.
+//
+//  A meta sai da FORÇA do clube (média dos atletas) — não existe mais
+//  sistema de Tiers. As faixas vêm de clubStrength (fonte única).
 // ════════════════════════════════════════════════════════
+import { forceBand, type ForceBand } from '@/data/clubStrength'
 
 export type GoalType =
   | 'champion'       // Ser campeão da Série A
@@ -19,8 +23,8 @@ export interface ContractGoal {
   secondaryLabel: string
 }
 
-// ── Meta por tier ────────────────────────────────────────
-const GOALS_BY_TIER: Record<string, ContractGoal> = {
+// ── Meta por faixa de força ──────────────────────────────
+const GOALS_BY_BAND: Record<ForceBand, ContractGoal> = {
   S: {
     primary:        'champion',
     secondary:      'champion',
@@ -49,34 +53,19 @@ const GOALS_BY_TIER: Record<string, ContractGoal> = {
     label:          'Não ser rebaixado',
     secondaryLabel: 'Terminar entre os 8 primeiros',
   },
-  D: {
-    primary:        'survive',
-    secondary:      'no_relegation',
-    minPosition:    19,
-    label:          'Terminar acima do último',
-    secondaryLabel: 'Sair do Z-4',
-  },
-}
-
-// Mapa de tier por força média
-function tierByForce(forcaMedia: number): string {
-  if (forcaMedia >= 75) return 'S'
-  if (forcaMedia >= 68) return 'A'
-  if (forcaMedia >= 58) return 'B'
-  if (forcaMedia >= 48) return 'C'
-  return 'D'
 }
 
 /**
- * Retorna as metas contratuais do clube.
- * Aceita o tier explícito (do CLUB_STRENGTH) ou calcula pelo forcaMedia.
+ * Retorna as metas contratuais do clube a partir da sua força (média dos atletas).
+ *
+ * Antes existia um `tierByForce` local com limiares 75/68/58 que DIVERGIAM dos
+ * tiers reais (Athletico-PR e Goiás caíam na meta errada). Ele nunca disparava
+ * porque todos os call sites passavam o tier explícito. Agora a faixa vem de
+ * `forceBand` (clubStrength), com limiares validados contra os dados reais —
+ * fonte única de verdade.
  */
-export function getContractGoal(
-  tier: string | undefined,
-  forcaMedia: number,
-): ContractGoal {
-  const t = tier ?? tierByForce(forcaMedia)
-  return GOALS_BY_TIER[t] ?? GOALS_BY_TIER['C']
+export function getContractGoal(forca: number): ContractGoal {
+  return GOALS_BY_BAND[forceBand(forca)]
 }
 
 /**
@@ -107,9 +96,4 @@ export function calcInitialBudget(forcaMedia: number): number {
   const raw  = 10_000_000 * Math.pow(forcaMedia / 75, 2.5)
   const rounded = Math.round(raw / 500_000) * 500_000
   return Math.max(500_000, Math.min(15_000_000, rounded))
-}
-
-// ── Mapa de força por tier (para exibição quando não há dado real) ──
-export const TIER_FORCE_ESTIMATE: Record<string, number> = {
-  S: 77, A: 72, B: 63, C: 52, D: 43,
 }

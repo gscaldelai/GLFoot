@@ -229,28 +229,38 @@ verificados no browser (checks via `window.glfoot` + fluxo pela UI):
 
 ## Bugs encontrados jogando (a triar)
 
-- 🔲 **J-01** 🟠 **Lesão não recupera** — jogador (Maguinhos) lesionado "volta em 3 rodadas",
-  mas as rodadas passam e ele não volta (badge fica travado em `3r`). Investigação inicial:
-  `advanceInjuryRecovery` (`injuryEngine.ts`) está correta (decrementa `injuryRoundsLeft` e
-  cura em 0) e o `nextRound` a aplica no `useLineupStore` (slots+bench) toda rodada. Suspeita:
-  interação com o **write-back de fim de jogo** (`useMatchStore` ~723-745), que re-marca o
-  lesionado com `injuryRoundsLeft + 1` (compensação do decremento) — protegido por
-  `if (p.injured) return p`. Se esse guard não disparar (p.injured falso no lineup no momento
-  do write-back), o valor re-soma +1 toda rodada e a recuperação nunca progride → travado.
-  **A confirmar com trace em runtime** (injetar lesão e acompanhar `injuryRoundsLeft` rodada a
-  rodada). Relatado jogando em ~rodada com Maguinhos no banco marcado `3r`.
+- ✅ **J-01** 🔴 **Lesão nunca recuperava — DEADLOCK** (resolvido em 14/07, commit `f88ec41`).
+  Jogador lesionado "volta em 3 rodadas", mas o badge ficava travado em `3r` **para sempre** e a
+  carreira parava.
+  **A hipótese inicial deste relatório estava ERRADA** e foi refutada com teste de mesa: o
+  write-back **não** re-somava `+1` toda rodada — o guard `if (p.injured) return p`
+  (`useMatchStore`:736) dispara corretamente da 2ª rodada em diante, e `advanceInjuryRecovery`
+  (`injuryEngine.ts`:100) sempre esteve correta.
+  **Causa raiz real — deadlock:** a recuperação existe num único lugar (dentro do `nextRound`),
+  e o `nextRound` só é alcançável jogando uma partida até os 90'. Mas o write-back marcava o
+  lesionado **sem tirá-lo do slot de titular**, e o `ManagerHub` (:647) **bloqueia o botão JOGAR**
+  enquanto houver titular lesionado. Logo: lesionado no XI → não joga → `nextRound` nunca roda →
+  `advanceInjuryRecovery` nunca roda → lesão congelada e carreira travada. Parecia intermitente
+  porque quem movia o lesionado para o banco na mão destravava o ciclo sem perceber.
+  **Correção:** `useLineupStore.expelInjured()` tira lesionados do XI puxando o melhor reserva
+  sadio (mesma posição primeiro); chamado no `nextRound` **depois** da recuperação (para não mexer
+  em quem acabou de sarar e manter a fadiga no XI que jogou) **e** ao montar o `ManagerHub` —
+  este último destrava saves que já estavam presos (o fix do `nextRound` sozinho não os alcança,
+  justamente porque ele nunca roda).
+  **Verificado no browser:** deadlock reproduzido (JOGAR `disabled` + "substitua antes de jogar");
+  após o fix o lesionado vai ao banco, um reserva assume, JOGAR habilita, e o ciclo completo roda
+  `3r → 2r → 1r → curado` na 4ª rodada.
 
-- 🔲 **J-02** 🟡 **Jogador lesionado segue no banco da partida** — um reserva indisponível
-  (lesionado) continua aparecendo no banco durante o jogo, quando não deveria estar lá (não pode
-  entrar). Causa localizada: em `prepareMatch` (`useMatchStore` ~410-411) o banco é copiado
-  verbatim do clube — `homeBench: JSON.parse(JSON.stringify(home.bench))` / idem `awayBench` —
-  **sem `.filter(p => !p.injured)`**. Logo, um lesionado no elenco entra no banco da partida e
-  vira reserva selecionável (banco em campo + tela de Ajustes / substituição). Correção prevista:
-  excluir lesionados do banco da partida (ao menos do time humano) ao montar `homeBench`/`awayBench`
-  — ou marcá-los como não-selecionáveis. Relacionado a [[J-01]]: como a lesão nunca zera, o
-  jogador permanece no banco indefinidamente. Relatado com Maguinhos (nº 3) marcado no banco.
-  **Ao corrigir, validar no browser** que o lesionado some do banco e que a contagem de reservas
-  disponíveis cai de acordo.
+- ✅ **J-02** 🟡 **Jogador lesionado ocupava vaga no banco da partida** (resolvido em 14/07,
+  commit `f88ec41`). `prepareMatch` (`useMatchStore`:410-411) copiava `club.bench` verbatim, sem
+  `.filter(p => !p.injured)` — o indisponível ocupava uma das vagas do banco.
+  **Correção:** filtra `p.injured` ao montar `homeBench`/`awayBench` (nos dois lados).
+  **Nota da triagem:** a suspeita de que ele era *selecionável* para substituição era **falsa** —
+  todas as superfícies já barravam lesionado (`BenchZone`:34, `InjurySubModal`:25,
+  `MatchAdjustments`:83, e re-guards em `doSub`/`resolveInjurySub`/`pickBotReplacement`). O defeito
+  real era de modelo/visual: disco inerte poluindo a faixa e roubando uma vaga de reserva.
+  **Verificado no browser:** banco do SPFC na partida veio com 4 em vez de 5 (sem o lesionado) e
+  nenhum `injured` nos bancos dos dois times.
 
 ---
 

@@ -4,13 +4,14 @@
 //
 //  ⚠ As fórmulas ESPELHAM src/engines/coachEngine.ts
 //    (Node não importa TS). Se alterar o engine, atualize aqui.
-//  Os clubes/tiers são PARSEADOS de src/data/clubStrength.ts.
+//  Os clubes vêm dos JSONs em src/data/clubs/ — a força é a MÉDIA DOS
+//  ATLETAS (elenco + banco). Não existe mais sistema de Tiers.
 //
 //  Critérios:
 //   1. Bônus de técnico não quebra o Poisson: média gols/jogo
 //      da liga permanece em 2.4–3.1 com bônus ativo
 //   2. Demissões por temporada: média entre 1 e 12
-//   3. Zero contratações abaixo da reputação mínima do tier
+//   3. Zero contratações abaixo da reputação mínima para a força do clube
 //   4. Nenhum clube termina rodada sem técnico
 //   5. Bônus máximo |±0.05|
 // ══════════════════════════════════════════════════
@@ -18,15 +19,27 @@
 const fs   = require('fs')
 const path = require('path')
 
-// ── Clubes reais parseados da fonte ─────────────────────────
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'data', 'clubStrength.ts'), 'utf8')
-  .replace(/\r\n/g, '\n')
-const CLUBS = [...src.matchAll(/\{ id:'([^']+)',\s*name:'([^']+)',\s*division:\d,\s*forcaMedia:([\d.]+),\s*tier:'([SABC])' \}/g)]
-  .map(m => ({ id: m[1], name: m[2], forca: parseFloat(m[3]), tier: m[4] }))
-if (CLUBS.length < 15) { console.error(`❌ Parse de clubStrength.ts falhou (${CLUBS.length} clubes)`); process.exit(1) }
+// ── Clubes reais lidos dos JSONs ────────────────────────────
+// Antes isto parseava clubStrength.ts por regex exigindo `tier:'[SABC]'`.
+// Com a remoção dos tiers o regex zerava e derrubava o teste — agora lê a
+// fonte de verdade (os elencos) e calcula a força como o app faz.
+const CLUBS_DIR = path.join(__dirname, '..', 'src', 'data', 'clubs')
+const avg = arr => arr.reduce((s, p) => s + p.forca, 0) / arr.length
+const CLUBS = fs.readdirSync(CLUBS_DIR)
+  .filter(f => f.endsWith('.json'))
+  .map(f => JSON.parse(fs.readFileSync(path.join(CLUBS_DIR, f), 'utf8')))
+  .map(c => ({
+    id: c.id,
+    name: c.name,
+    forca: avg([...c.squad, ...c.bench]),          // força institucional (elenco+banco)
+    forcaXI: avg(c.squad),                          // força em campo (alimenta o λ)
+  }))
+if (CLUBS.length < 15) { console.error(`❌ Leitura dos clubes falhou (${CLUBS.length} clubes)`); process.exit(1) }
 
 // ── Espelho do coachEngine.ts ───────────────────────────────
-const MIN_REP = { S: 4, A: 3, B: 2, C: 1 }
+// minReputationForForce — mesmos limiares de FORCE_BANDS (clubStrength.ts)
+const FORCE_BANDS = { S: 75, A: 68.5, B: 61 }
+const minRepForForce = f => (f >= FORCE_BANDS.S ? 4 : f >= FORCE_BANDS.A ? 3 : f >= FORCE_BANDS.B ? 2 : 1)
 const coachBonus = rep => (rep - 3) * 0.025
 const UNDERPERFORM_GAP = 6, PRESSURE_TO_FIRE = 5, GRACE = 5, FIRST_EVAL = 6
 
@@ -56,7 +69,7 @@ let firingsPerSeason = [], badHires = 0, clubsSemTecnico = 0
 for (let t = 0; t < SEASONS; t++) {
   // técnicos iniciais (1 por clube) + 6 no mercado
   let coaches = CLUBS.map(c => ({
-    clubId: c.id, reputation: MIN_REP[c.tier] + (Math.random() < 0.35 ? 1 : 0),
+    clubId: c.id, reputation: minRepForForce(c.forca) + (Math.random() < 0.35 ? 1 : 0),
     pressure: 0, hiredRound: 0,
   }))
   ;[1, 1, 2, 2, 3, 4].forEach(rep => coaches.push({ clubId: null, reputation: rep, pressure: 0, hiredRound: 0 }))
@@ -73,8 +86,10 @@ for (let t = 0; t < SEASONS; t++) {
     for (let i = 0; i + 1 < shuffled.length; i += 2) {
       const [h, a] = [shuffled[i], shuffled[i + 1]]
       const cH = coaches.find(c => c.clubId === h.id), cA = coaches.find(c => c.clubId === a.id)
-      const gh = poisson(calcLambda(h.forca, a.forca, true,  coachBonus(cH?.reputation ?? 3)))
-      const ga = poisson(calcLambda(a.forca, h.forca, false, coachBonus(cA?.reputation ?? 3)))
+      // λ usa a força do XI (como useMatchStore: avgSquad(club.squad)); a força
+      // institucional (elenco+banco) só baliza reputação/meta.
+      const gh = poisson(calcLambda(h.forcaXI, a.forcaXI, true,  coachBonus(cH?.reputation ?? 3)))
+      const ga = poisson(calcLambda(a.forcaXI, h.forcaXI, false, coachBonus(cA?.reputation ?? 3)))
       pts[h.id] += gh > ga ? 3 : gh === ga ? 1 : 0
       pts[a.id] += ga > gh ? 3 : ga === gh ? 1 : 0
     }
@@ -101,7 +116,7 @@ for (let t = 0; t < SEASONS; t++) {
     const withCoach = new Set(coaches.filter(c => c.clubId).map(c => c.clubId))
     for (const club of CLUBS) {
       if (withCoach.has(club.id)) continue
-      const minRep = MIN_REP[club.tier]
+      const minRep = minRepForForce(club.forca)
       const eligible = coaches.filter(c => c.clubId === null && c.reputation >= minRep)
       let hire = eligible.length
         ? eligible.reduce((b, c) => c.reputation > b.reputation ? c : b)
@@ -126,7 +141,7 @@ console.log('')
 console.log(`  Média gols/jogo (pior caso 5★×1★): ${mediaGols.toFixed(2)}  (meta: 2.4–3.1)`)
 console.log(`  Bônus máximo de técnico:            ±${maxBonus.toFixed(3)}  (meta: ≤0.05)`)
 console.log(`  Demissões/temporada (média):        ${mediaFirings.toFixed(1)}  (meta: 1–12)`)
-console.log(`  Contratações abaixo do tier:        ${badHires}  (meta: 0)`)
+console.log(`  Contratações abaixo da força mín.:  ${badHires}  (meta: 0)`)
 console.log(`  Clube-rodadas sem técnico:          ${clubsSemTecnico}  (meta: 0)`)
 console.log('')
 

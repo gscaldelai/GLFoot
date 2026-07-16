@@ -5,7 +5,9 @@ import { useMatchStore }      from '@/stores/useMatchStore'
 import { useCoachStore }      from '@/stores/useCoachStore'
 import { useAuthStore }       from '@/stores/useAuthStore'
 import { useConfidenceStore } from '@/stores/useConfidenceStore'
-import { CLUB_STRENGTH }      from '@/data/clubStrength'
+import { CLUB_STRENGTH, clubForce, forceLabel, FORCE_BANDS } from '@/data/clubStrength'
+import { useLineupStore }     from '@/stores/useLineupStore'
+import type { Player }        from '@/engines/types'
 import { CLUBS_MAP }          from '@/data/clubs'
 import { calcPlayerReputation } from '@/engines/coachEngine'
 import { getContractGoal, calcInitialBudget } from '@/data/clubGoals'
@@ -19,11 +21,12 @@ function Stars({ n }: { n: number }) {
   )
 }
 
-const TIER_COLOR: Record<string, string> = {
-  S: 'text-gold border-gold/40 bg-gold/10',
-  A: 'text-emerald-400 border-emerald-400/30 bg-emerald-400/5',
-  B: 'text-[#5a9ac0] border-[#5a9ac0]/30 bg-[#5a9ac0]/5',
-  C: 'text-[#8a9aaa] border-border bg-surface2',
+// Cor por faixa de força (média dos atletas) — não existe mais tier
+function forceColor(force: number): string {
+  if (force >= FORCE_BANDS.S) return 'text-gold border-gold/40 bg-gold/10'
+  if (force >= FORCE_BANDS.A) return 'text-emerald-400 border-emerald-400/30 bg-emerald-400/5'
+  if (force >= FORCE_BANDS.B) return 'text-[#5a9ac0] border-[#5a9ac0]/30 bg-[#5a9ac0]/5'
+  return 'text-[#8a9aaa] border-border bg-surface2'
 }
 
 // ── Tela Técnicos: um técnico por clube + mercado + notícias ──────────────────
@@ -36,6 +39,11 @@ export function TecnicosScreen() {
   const playerRep = calcPlayerReputation(completedSeasons)
   const freeAgents = coaches.filter(c => c.clubId === null)
 
+  // Elenco vivo do meu clube: a força dele muda com transferências/lesões
+  const mySlots = useLineupStore(s => s.slots)
+  const myBench = useLineupStore(s => s.bench)
+  const myRoster = [...mySlots.filter(Boolean) as Player[], ...myBench]
+
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Tabela de clubes */}
@@ -45,7 +53,7 @@ export function TecnicosScreen() {
           <thead>
             <tr className="text-[9px] uppercase tracking-[1px] text-[#4a6070] text-left">
               <th className="pb-2">Clube</th>
-              <th className="pb-2">Tier</th>
+              <th className="pb-2">Força</th>
               <th className="pb-2">Técnico</th>
               <th className="pb-2">Reputação</th>
               <th className="pb-2 text-right">Idade</th>
@@ -66,9 +74,16 @@ export function TecnicosScreen() {
                     </div>
                   </td>
                   <td>
-                    <span className={`text-[9px] font-bold border rounded px-[5px] py-[1px] ${TIER_COLOR[entry.tier]}`}>
-                      {entry.tier}
-                    </span>
+                    {(() => {
+                      // O clube do jogador mostra a força VIVA (muda com transferências);
+                      // os bots, a força do elenco do JSON.
+                      const f = isMe ? clubForce(entry.id, myRoster) : clubForce(entry.id)
+                      return (
+                        <span className={`text-[9px] font-bold border rounded px-[5px] py-[1px] ${forceColor(f)}`}>
+                          {f.toFixed(1)}
+                        </span>
+                      )
+                    })()}
                   </td>
                   <td className="text-white/85">
                     {isMe ? <>👤 {coachName || 'Você'} <span className="text-[9px] text-gold">(você)</span></>
@@ -137,7 +152,7 @@ export function CentralEmpregoScreen() {
     <div className="flex flex-1 flex-col overflow-y-auto px-5 py-4">
       <div className="font-bebas text-[22px] tracking-[3px] text-gold mb-1">💼 CENTRAL DE EMPREGO</div>
       <div className="text-[11px] text-[#6a8090] mb-4">
-        Sua reputação: <Stars n={playerRep} /> — clubes de tier compatível podem te contratar.
+        Sua reputação: <Stars n={playerRep} /> — clubes com força compatível com sua reputação podem te contratar.
       </div>
 
       {isFired && offers.length > 0 ? (
@@ -148,8 +163,9 @@ export function CentralEmpregoScreen() {
               const entry = CLUB_STRENGTH.find(e => e.id === clubId)
               const club  = CLUBS_MAP[clubId]
               if (!entry || !club) return null
-              const goal   = getContractGoal(entry.tier, entry.forcaMedia)
-              const budget = calcInitialBudget(entry.forcaMedia)
+              const forca  = clubForce(clubId)
+              const goal   = getContractGoal(forca)
+              const budget = calcInitialBudget(forca)
               return (
                 <div key={clubId}
                      className="w-[230px] bg-surface border border-border rounded-xl p-4 flex flex-col gap-2">
@@ -157,8 +173,8 @@ export function CentralEmpregoScreen() {
                     <Shirt colors={club.colors} size={28} />
                     <div>
                       <div className="font-bebas text-[16px] tracking-[1px] text-white leading-none">{entry.name}</div>
-                      <span className={`text-[9px] font-bold border rounded px-[4px] ${TIER_COLOR[entry.tier]}`}>
-                        Tier {entry.tier}
+                      <span className={`text-[9px] font-bold border rounded px-[4px] ${forceColor(forca)}`}>
+                        {forceLabel(forca)} · {forca.toFixed(1)}
                       </span>
                     </div>
                   </div>

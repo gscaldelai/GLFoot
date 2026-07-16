@@ -33,7 +33,7 @@ import { useTransferStore }    from './useTransferStore'
 import { useFinanceStore }     from './useFinanceStore'
 import { useStadiumStore }     from './useStadiumStore'
 import { useConfidenceStore }             from './useConfidenceStore'
-import { CLUB_STRENGTH }                 from '@/data/clubStrength'
+import { clubForce }                     from '@/data/clubStrength'
 import { getContractGoal, calcInitialBudget } from '@/data/clubGoals'
 import { getFormationBonus, pickBotFormation, FORMATIONS, slotToMatchPos, assignToFormation, type FormationKey } from '@/data/formations'
 import { generateFixtures, type FixtureGame } from '@/engines/fixtureEngine'
@@ -79,6 +79,14 @@ interface GoalFlash {
 interface InjurySub {
   side:     'home' | 'away'
   fieldIdx: number
+}
+
+// Elenco VIVO do clube do jogador (titulares + banco). É o que torna a força do
+// clube dinâmica: muda com transferências, lesões e envelhecimento. Os bots não
+// têm elenco vivo — a força deles sai do JSON (clubForce sem override).
+function liveRoster(): Player[] {
+  const ls = useLineupStore.getState()
+  return [...(ls.slots.filter(Boolean) as Player[]), ...ls.bench]
 }
 
 // Escolhe o melhor reserva elegível para substituir um lesionado (bots)
@@ -322,10 +330,9 @@ export const useMatchStore = create<MatchStore>()(
   selectClub(clubId, allClubs, coachName = '', coachNationality = '') {
     const standings = initStandings(allClubs)
 
-    // Calcula orçamento e meta com base na força do clube
-    const strengthEntry = CLUB_STRENGTH.find(e => e.id === clubId)
-    const forcaMedia    = strengthEntry?.forcaMedia ?? 60
-    const contractGoal  = getContractGoal(strengthEntry?.tier, forcaMedia)
+    // Calcula orçamento e meta com base na força do clube (média dos atletas)
+    const forcaMedia    = clubForce(clubId)
+    const contractGoal  = getContractGoal(forcaMedia)
     const initialBudget = calcInitialBudget(forcaMedia)
 
     // Gera fixture completo (round-robin 38 rodadas)
@@ -687,8 +694,6 @@ export const useMatchStore = create<MatchStore>()(
       const myGoals  = isMyHome ? gh : ga
       const oppGoals = isMyHome ? ga : gh
       const oppClubId = isMyHome ? s.awayClub.id : s.homeClub.id
-      const oppEntry  = CLUB_STRENGTH.find(e => e.id === oppClubId)
-      const myEntry   = CLUB_STRENGTH.find(e => e.id === s.myClubId!)
       useConfidenceStore.getState().onMatchResult({
         round:      s.round,
         season:     s.season,
@@ -696,8 +701,8 @@ export const useMatchStore = create<MatchStore>()(
         myGoals,
         oppGoals,
         isClassico: classicoPair(s.homeClub.id, s.awayClub.id),
-        oppForce:   oppEntry?.forcaMedia ?? 60,
-        myForce:    myEntry?.forcaMedia  ?? 60,
+        oppForce:   clubForce(oppClubId),
+        myForce:    clubForce(s.myClubId!, liveRoster()),
       })
     }
 
@@ -752,8 +757,11 @@ export const useMatchStore = create<MatchStore>()(
       if (fix.homeId === myId || fix.awayId === myId) continue  // jogo do player, já resolvido
       const homeClub = CLUBS_MAP[fix.homeId]
       const awayClub = CLUBS_MAP[fix.awayId]
-      const avH = homeClub ? avgSquad(homeClub.squad) : (CLUB_STRENGTH.find(e => e.id === fix.homeId)?.forcaMedia ?? 65)
-      const avA = awayClub ? avgSquad(awayClub.squad) : (CLUB_STRENGTH.find(e => e.id === fix.awayId)?.forcaMedia ?? 65)
+      // λ usa a força do XI (avgSquad), não a força institucional do clube
+      // (elenco+banco) — são medidas diferentes de propósito. Não trocar por
+      // clubForce aqui: mudaria o engine (regra do projeto).
+      const avH = homeClub ? avgSquad(homeClub.squad) : 65
+      const avA = awayClub ? avgSquad(awayClub.squad) : 65
       // Técnicos NPC influenciam os jogos bot×bot (F-01)
       const coachStore = useCoachStore.getState()
       const cbH = coachLambdaBonus(coachStore.coachOf(fix.homeId)?.reputation ?? 3)
@@ -805,7 +813,7 @@ export const useMatchStore = create<MatchStore>()(
     // ── Simulação de copas: fases eliminatórias da semana atual ───────────
     const currentWeek = s.round   // aproximação: rodada ≈ semana
     const cupStatus   = { ...s.cupStatus }
-    const myForce     = CLUB_STRENGTH.find(e => e.id === s.myClubId)?.forcaMedia ?? 65
+    const myForce     = clubForce(s.myClubId!, liveRoster())
 
     for (const game of s.clubCalendar) {
       const comp = COMPETITION_CATALOG[game.competitionId]
@@ -923,10 +931,11 @@ export const useMatchStore = create<MatchStore>()(
     // Técnico NPC do clube escolhido vai para o mercado livre
     useCoachStore.getState().acceptOffer(clubId, get().round)
 
-    // Novo contrato: meta, orçamento e confiança do novo clube
-    const strengthEntry = CLUB_STRENGTH.find(e => e.id === clubId)
-    const forcaMedia    = strengthEntry?.forcaMedia ?? 60
-    const contractGoal  = getContractGoal(strengthEntry?.tier, forcaMedia)
+    // Novo contrato: meta, orçamento e confiança do novo clube.
+    // Sem override: ao assumir, o elenco vivo ainda é o do clube ANTIGO — a meta
+    // tem que sair da força do clube novo (JSON), não do que sobrou na tela.
+    const forcaMedia    = clubForce(clubId)
+    const contractGoal  = getContractGoal(forcaMedia)
     const initialBudget = calcInitialBudget(forcaMedia)
     useFinanceStore.getState().reset(initialBudget)
     useConfidenceStore.getState().reset()   // zera isFired e medidores
