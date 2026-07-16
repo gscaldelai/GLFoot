@@ -33,6 +33,10 @@ interface LineupStore {
   setDragSrc:  (src: DragSrc | null) => void
   dropOn:      (target: DragSrc) => void
 
+  // Tira lesionados do XI puxando o melhor reserva sadio (J-01).
+  // Retorna true se mexeu na escalação.
+  expelInjured: () => boolean
+
   // Retorna os 11 jogadores com fieldPos convertido para o campo horizontal
   getLineupForMatch: () => Player[]
 }
@@ -140,6 +144,24 @@ export const useLineupStore = create<LineupStore>()(
     if (!s.dragSrc) return
     const { slots, bench } = swapInStore(s.slots, s.bench, s.dragSrc, target)
     set({ slots, bench, dragSrc: null, selected: null })
+  },
+
+  expelInjured() {
+    const s = get()
+    if (!s.slots.some(p => p?.injured)) return false
+    const bench = [...s.bench]
+    const slots = s.slots.map(p => {
+      if (!p || !p.injured) return p
+      // Prefere um reserva sadio da mesma posição; senão, qualquer sadio
+      let j = bench.findIndex(b => !b.injured && b.pos === p.pos)
+      if (j < 0) j = bench.findIndex(b => !b.injured)
+      if (j < 0) return p   // banco sem reserva sadio — mantém e a UI avisa
+      const sub = bench[j]
+      bench[j] = p
+      return sub
+    })
+    set({ slots, bench, selected: null })
+    return true
   },
 
   getLineupForMatch() {

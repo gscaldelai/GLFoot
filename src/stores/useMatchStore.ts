@@ -407,8 +407,9 @@ export const useMatchStore = create<MatchStore>()(
       homeClub:   home,  awayClub:   away,
       homeSquad:  positionSquad(JSON.parse(JSON.stringify(home.squad)), homeFormation, false),
       awaySquad:  positionSquad(JSON.parse(JSON.stringify(away.squad)), awayFormation, true),
-      homeBench:  JSON.parse(JSON.stringify(home.bench)),
-      awayBench:  JSON.parse(JSON.stringify(away.bench)),
+      // Lesionado é indisponível: não ocupa vaga no banco da partida (J-02)
+      homeBench:  JSON.parse(JSON.stringify(home.bench.filter(p => !p.injured))),
+      awayBench:  JSON.parse(JSON.stringify(away.bench.filter(p => !p.injured))),
       subCount:   { home: 0, away: 0 },
       gh: 0, ga: 0, minute: 0, second: 0,
       running: false, ended: false,   // speed mantém a última escolha do usuário (U-04)
@@ -787,6 +788,13 @@ export const useMatchStore = create<MatchStore>()(
         return p.injured ? advanceInjuryRecovery(rec) : rec
       }),
     })
+
+    // ── Lesionado sai do XI automaticamente (J-01) ────────────────────────
+    // O JOGAR fica bloqueado enquanto houver titular lesionado (ManagerHub), e a
+    // recuperação só roda aqui no nextRound — que exige jogar. Sem tirar o lesionado
+    // da escalação, a carreira trava e a lesão nunca recupera. Roda DEPOIS da
+    // recuperação para não mexer em quem acabou de sarar.
+    useLineupStore.getState().expelInjured()
 
     // ── Desconto de salários (a cada 4 rodadas ≈ mensalmente) ─────────────
     const lsAfter   = useLineupStore.getState()

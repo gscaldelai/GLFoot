@@ -188,6 +188,10 @@ export default function ManagerHub() {
     if (useCoachStore.getState().coaches.length === 0) {
       useCoachStore.getState().initCareer(myClub.id)
     }
+    // Auto-cura (J-01): um lesionado escalado bloqueia o JOGAR, e a recuperação só
+    // roda no nextRound — que exige jogar. Carreiras salvas nesse estado ficavam
+    // travadas para sempre. Tira o lesionado do XI ao abrir o hub.
+    useLineupStore.getState().expelInjured()
   }, [init, myClub])
 
   // Atalhos de teclado globais
